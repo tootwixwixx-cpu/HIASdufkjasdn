@@ -139,8 +139,10 @@ export const antiBypassService = {
       title: string;
       duration_seconds: number;
       order: number;
+      url?: string;
       gatewayUrl: string;
       gatewayToken: string;
+      is_workink?: boolean;
     }[];
     powChallenge: { nonce: string; difficulty: number };
   } {
@@ -150,7 +152,13 @@ export const antiBypassService = {
     const powChallenge = generatePoWChallenge(3);
 
     const stepDetails = sorted.map((cp, idx) => {
-      const duration = Math.max(5, Number(cp.duration_seconds) || 5);
+      const isWorkink = Boolean(
+        Number(cp.duration_seconds) === 0 ||
+        cp.url?.includes("work.ink") ||
+        cp.url?.includes("workink.net") ||
+        (cp as any).is_workink
+      );
+      const duration = isWorkink ? 0 : Math.max(1, Number(cp.duration_seconds) || 5);
       const gwPayload: GatewayTokenPayload = {
         t: "gw",
         sid: sessionId,
@@ -170,8 +178,10 @@ export const antiBypassService = {
         title: cp.title,
         duration_seconds: duration,
         order: cp.order,
+        url: cp.url,
         gatewayUrl,
         gatewayToken,
+        is_workink: isWorkink,
       };
     });
 
@@ -306,8 +316,8 @@ export const antiBypassService = {
     if (!res.valid || !res.payload) {
       return {
         success: false,
-        bypassDetected: true,
-        error: res.error || "Active step token invalid or expired. Please click 'Visit Task' again.",
+        bypassDetected: false,
+        error: "Active step session expired. Please click 'Visit Task' or reopen the link.",
       };
     }
 
@@ -319,8 +329,8 @@ export const antiBypassService = {
     if (!isIpMatching(payload.ip, ip)) {
       return {
         success: false,
-        bypassDetected: true,
-        error: "Network mismatch: Verification request originated from an unrecognized IP.",
+        bypassDetected: false,
+        error: "Network mismatch: Your network IP changed during verification. Please reopen the task.",
       };
     }
 
@@ -328,16 +338,14 @@ export const antiBypassService = {
     const elapsedSec = (Date.now() - payload.startedAt) / 1000;
     const requiredSec = payload.duration;
 
-    // Allow 1.0 second tolerance for network latency, strictly block anything faster
+    // Allow 1.0 second tolerance for network latency
     if (elapsedSec < requiredSec - 1.0) {
       const remaining = Math.ceil(requiredSec - elapsedSec);
       return {
         success: false,
-        bypassDetected: true,
+        bypassDetected: false,
         remainingSeconds: remaining,
-        error: `Temporal anomaly detected: Task completed unnaturally fast (${Math.floor(
-          elapsedSec
-        )}s < ${requiredSec}s). Please spend ${remaining} more seconds on the task.`,
+        error: `Please wait ${remaining} more seconds on the destination task page.`,
       };
     }
 
@@ -345,6 +353,13 @@ export const antiBypassService = {
     const nonceToVerify = payload.powNonce || powNonce || "";
     const difficultyToVerify = payload.powDifficulty || 3;
     if (nonceToVerify) {
+      if (!powSolution || !powSolution.trim()) {
+        return {
+          success: false,
+          bypassDetected: false,
+          error: "Verification challenge was interrupted. Please retry or click 'Visit Task'.",
+        };
+      }
       const powValid = verifyPoWSolution(nonceToVerify, powSolution, difficultyToVerify);
       if (!powValid) {
         return {

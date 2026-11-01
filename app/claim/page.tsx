@@ -346,12 +346,13 @@ export default function ClaimKeyPage() {
               id: s.id,
               script_id: "all",
               title: s.title,
-              url: s.gatewayUrl, // Uses secure gateway redirect
+              url: s.url || s.gatewayUrl,
               duration_seconds: s.duration_seconds,
               order: s.order,
               created_at: new Date().toISOString(),
               gatewayToken: s.gatewayToken,
               gatewayUrl: s.gatewayUrl,
+              is_workink: s.is_workink,
             }))
           );
           setStepGatewayUrls(data.stepDetails.map((s: any) => s.gatewayUrl));
@@ -477,7 +478,7 @@ export default function ClaimKeyPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const key = `atom_cp_progress_${scriptSlug || "default"}`;
-    if (completedCpIds.length > 0 || claimToken || sessionId) {
+    if (completedCpIds.length > 0 || claimToken || sessionId || workinkOpenedCpId || currentStepToken) {
       try {
         sessionStorage.setItem(
           key,
@@ -488,11 +489,13 @@ export default function ClaimKeyPage() {
             sessionId,
             stepEndTime,
             currentStepToken,
+            workinkOpenedCpId,
+            powChallenge,
           })
         );
       } catch {}
     }
-  }, [completedCpIds, activeCpIndex, claimToken, sessionId, stepEndTime, currentStepToken, scriptSlug]);
+  }, [completedCpIds, activeCpIndex, claimToken, sessionId, stepEndTime, currentStepToken, workinkOpenedCpId, powChallenge, scriptSlug]);
 
   // Restore checkpoint progress from sessionStorage on load/reload
   useEffect(() => {
@@ -513,6 +516,12 @@ export default function ClaimKeyPage() {
         }
         if (parsed.sessionId) {
           setSessionId(parsed.sessionId);
+        }
+        if (parsed.workinkOpenedCpId) {
+          setWorkinkOpenedCpId(parsed.workinkOpenedCpId);
+        }
+        if (parsed.powChallenge) {
+          setPowChallenge(parsed.powChallenge);
         }
         if (parsed.currentStepToken) {
           setCurrentStepToken(parsed.currentStepToken);
@@ -793,6 +802,14 @@ export default function ClaimKeyPage() {
           setTimerRunning(true);
         } else {
           setError(data.error || "Verification failed. Please complete the task genuinely.");
+          if (
+            data.error?.includes("expired") ||
+            data.error?.includes("interrupted") ||
+            data.error?.includes("token") ||
+            data.error?.includes("session")
+          ) {
+            setCurrentStepToken(null);
+          }
         }
         return;
       }
