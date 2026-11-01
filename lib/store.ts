@@ -1329,6 +1329,13 @@ export const dbService = {
           .update({ status: "disconnected" })
           .eq("status", "active")
           .lt("last_heartbeat", cutoffIso);
+
+        // Auto-purge dead sessions inactive for > 24 hours to prevent database bloat
+        const deadCutoff = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+        await supabase
+          .from("sessions")
+          .delete()
+          .lt("last_heartbeat", deadCutoff);
       } catch (err) {
         console.error("Supabase markStaleSessionsDisconnected error:", err);
       }
@@ -2373,6 +2380,9 @@ export const dbService = {
   },
 
   async getAnalytics(timeframe = "all", scriptId?: string) {
+    // Opportunistic background pruning (runs at most once every 6h)
+    this.autoPruneStaleLogs().catch(() => {});
+
     const cutoff = getTimeCutoff(timeframe);
     let executions: ExecutionLog[] = [];
     let checkpoints: CheckpointLog[] = [];
@@ -2465,8 +2475,8 @@ export const dbService = {
           failedCountQ,
           cpStartedQ,
           cpCompletedQ,
-          execQuery.limit(1000),
-          cpQuery.limit(1000),
+          execQuery.limit(200),
+          cpQuery.limit(200),
         ]);
 
         if (typeof totalRes.count === "number") exactTotal = totalRes.count;
@@ -2732,6 +2742,34 @@ export const dbService = {
       }
     }
     return true;
+  },
+
+  /**
+   * Automatic background retention prune for logs and high-churn tables.
+   * Throttled to at most once per 6 hours to minimize database writes.
+   */
+  async autoPruneStaleLogs(force = false): Promise<void> {
+    const now = Date.now();
+    if (!force && (global as any).__lastLogsPrune && now - (global as any).__lastLogsPrune < 6 * 3600 * 1000) {
+      return;
+    }
+    (global as any).__lastLogsPrune = now;
+
+    if (!isSupabaseConfigured || !supabase) return;
+
+    try {
+      const sevenDaysAgo = new Date(now - 7 * 24 * 3600 * 1000).toISOString();
+      const thirtyDaysAgo = new Date(now - 30 * 24 * 3600 * 1000).toISOString();
+
+      await Promise.allSettled([
+        supabase.from("checkpoint_logs").delete().lt("created_at", sevenDaysAgo),
+        supabase.from("execution_logs").delete().lt("created_at", sevenDaysAgo),
+        supabase.from("client_errors").delete().lt("created_at", sevenDaysAgo),
+        supabase.from("bypass_attempts").delete().lt("created_at", thirtyDaysAgo),
+      ]);
+    } catch (err) {
+      console.warn("[autoPruneStaleLogs Warning]", err);
+    }
   },
 
   async getCheckpointAnalytics(scriptId?: string) {

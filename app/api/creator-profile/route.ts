@@ -6,7 +6,14 @@ import { isAuthenticated } from "@/lib/auth";
 export async function GET() {
   try {
     const profile = await dbService.getCreatorProfile();
-    return NextResponse.json({ profile });
+    return NextResponse.json(
+      { profile },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+        },
+      }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Error fetching creator profile";
     return NextResponse.json({ error: message }, { status: 500 });

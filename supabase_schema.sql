@@ -629,3 +629,40 @@ VALUES
     ('a5397f93-3f27-41b3-b68d-83ae68aa783b', 'all', 'Like & Comment Video', 'https://www.youtube.com/watch?v=Z6DbPPkLlq4', 45, 2),
     ('add593ab-7e23-45a8-9d57-798c4cb0b9cd', 'all', 'Join Community Discord', 'https://discord.gg/kGtqH3k2wN', 45, 3)
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- 23. Automated Database Maintenance Routine (Retention & Pruning)
+-- ============================================================================
+-- Keeps table sizes minimal to save disk space and prevent quota exhaustion.
+CREATE OR REPLACE FUNCTION public.prune_stale_data()
+RETURNS void AS $$
+BEGIN
+    -- 1. Prune dead sessions older than 24 hours
+    DELETE FROM public.sessions
+    WHERE last_heartbeat < (now() - INTERVAL '24 hours');
+
+    -- 2. Prune high-frequency execution and checkpoint logs older than 7 days
+    DELETE FROM public.checkpoint_logs
+    WHERE created_at < (now() - INTERVAL '7 days');
+
+    DELETE FROM public.execution_logs
+    WHERE created_at < (now() - INTERVAL '7 days');
+
+    -- 3. Prune old client errors older than 14 days
+    DELETE FROM public.client_errors
+    WHERE created_at < (now() - INTERVAL '14 days');
+
+    -- 4. Prune old bypass attempt records older than 30 days
+    DELETE FROM public.bypass_attempts
+    WHERE created_at < (now() - INTERVAL '30 days');
+
+    -- 5. Cap chatroom messages: keep newest 200
+    DELETE FROM public.chatroom_messages
+    WHERE id NOT IN (
+        SELECT id FROM public.chatroom_messages
+        ORDER BY created_at DESC
+        LIMIT 200
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+

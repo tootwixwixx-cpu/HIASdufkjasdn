@@ -42,6 +42,9 @@ next-env.d.ts
 assembled_debug.lua
 reproduced_payload.lua
 server_decrypted.lua
+supabase_data_dump.*
+scripts/dump_supabase.js
+scripts/restore_supabase.js
 *.txt
 *.db
 fetch_scripts.js

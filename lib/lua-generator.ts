@@ -437,7 +437,7 @@ task.spawn(function()
     -- Keep refreshing the loader session heartbeat while user is on the key screen
     -- so the card doesn't time out while they're figuring out their key
     while LOADER_TOKEN do
-        task.wait(5)
+        task.wait(15)
         pcall(function()
             local _uName = (LocalPlayer and LocalPlayer.Name) or "Player"
             local _uId = tostring((LocalPlayer and LocalPlayer.UserId) or "0")
@@ -1371,7 +1371,7 @@ ${
                     end
                 end
             end)
-            task.wait(2.5)
+            task.wait(20)
         end
     end)
 
