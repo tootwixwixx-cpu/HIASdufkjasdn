@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { CheckpointItem, CreatorProfile } from "@/lib/store";
 import { SOCIAL_PLATFORMS } from "@/lib/social-platforms";
+import { WorkinkLogo } from "@/components/WorkinkLogo";
 
 // Fast client-side Proof-of-Work solver (takes ~20ms in genuine browsers, defeats headless HTTP scrapers)
 async function solvePoW(nonce: string, difficulty: number): Promise<string> {
@@ -474,37 +475,46 @@ export default function ClaimKeyPage() {
     }
   }, []);
 
-  // Save checkpoint progress to sessionStorage so mobile background reloads retain state
+  // Save checkpoint progress to localStorage & sessionStorage (3-minute retention)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const key = `atom_cp_progress_${scriptSlug || "default"}`;
     if (completedCpIds.length > 0 || claimToken || sessionId || workinkOpenedCpId || currentStepToken) {
       try {
-        sessionStorage.setItem(
-          key,
-          JSON.stringify({
-            completedCpIds,
-            activeCpIndex,
-            claimToken,
-            sessionId,
-            stepEndTime,
-            currentStepToken,
-            workinkOpenedCpId,
-            powChallenge,
-          })
-        );
+        const payload = JSON.stringify({
+          completedCpIds,
+          activeCpIndex,
+          claimToken,
+          sessionId,
+          stepEndTime,
+          currentStepToken,
+          workinkOpenedCpId,
+          powChallenge,
+          savedAt: Date.now(),
+        });
+        localStorage.setItem(key, payload);
+        sessionStorage.setItem(key, payload);
       } catch {}
     }
   }, [completedCpIds, activeCpIndex, claimToken, sessionId, stepEndTime, currentStepToken, workinkOpenedCpId, powChallenge, scriptSlug]);
 
-  // Restore checkpoint progress from sessionStorage on load/reload
+  // Restore checkpoint progress from localStorage / sessionStorage on load/reload (3-minute validity)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const key = `atom_cp_progress_${scriptSlug || "default"}`;
     try {
-      const raw = sessionStorage.getItem(key);
+      const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
       if (raw) {
         const parsed = JSON.parse(raw);
+        const age = Date.now() - (parsed.savedAt || 0);
+        const isValid = age <= 3 * 60 * 1000 || Boolean(parsed.claimToken);
+
+        if (!isValid) {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+          return;
+        }
+
         if (Array.isArray(parsed.completedCpIds) && parsed.completedCpIds.length > 0) {
           setCompletedCpIds(parsed.completedCpIds);
         }
@@ -560,16 +570,25 @@ export default function ClaimKeyPage() {
       let storedSessionId = sessionId;
 
       try {
-        const raw = sessionStorage.getItem(key);
+        const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (typeof parsed.activeCpIndex === "number") currentIndex = parsed.activeCpIndex;
-          if (Array.isArray(parsed.completedCpIds)) currentCompleted = parsed.completedCpIds;
-          if (parsed.sessionId) storedSessionId = parsed.sessionId;
+          const age = Date.now() - (parsed.savedAt || 0);
+          if (age <= 3 * 60 * 1000 || parsed.claimToken) {
+            if (typeof parsed.activeCpIndex === "number") currentIndex = parsed.activeCpIndex;
+            if (Array.isArray(parsed.completedCpIds)) currentCompleted = parsed.completedCpIds;
+            if (parsed.sessionId) storedSessionId = parsed.sessionId;
+          }
         }
       } catch {}
 
-      const activeCp = checkpoints[currentIndex] || checkpoints[currentCompleted.length] || checkpoints[0];
+      // Identify which step is actually being completed (supports multiple sequential Work.ink checkpoints)
+      const stepToVerify =
+        currentCompleted.length < checkpoints.length
+          ? currentCompleted.length
+          : Math.min(checkpoints.length - 1, currentIndex);
+
+      const activeCp = checkpoints[stepToVerify] || checkpoints[currentIndex] || checkpoints[0];
 
       try {
         const res = await fetch("/api/checkpoints/session", {
@@ -579,7 +598,7 @@ export default function ClaimKeyPage() {
             action: "verify_workink",
             token: workinkToken,
             sessionId: storedSessionId,
-            stepIndex: currentIndex,
+            stepIndex: stepToVerify,
             totalSteps: checkpoints.length,
             script_id: targetScript?.id || scriptSlug,
           }),
@@ -592,12 +611,29 @@ export default function ClaimKeyPage() {
 
           if (data.allCompleted && data.claimToken) {
             setClaimToken(data.claimToken);
-            setWorkinkSuccessMessage("🎉 Work.ink task verified! Slide the human slider below to unlock your key.");
+            setActiveCpIndex(checkpoints.length);
+            setWorkinkOpenedCpId(null);
+            setWorkinkSuccessMessage("🎉 All Work.ink tasks verified! Slide the human slider below to unlock your key.");
           } else {
-            const nextIdx = currentIndex + 1;
+            const nextIdx = stepToVerify + 1;
             setActiveCpIndex(nextIdx);
-            setWorkinkSuccessMessage(`✓ Work.ink Step #${currentIndex + 1} completed! Please continue to the next task.`);
+            setWorkinkOpenedCpId(null);
+            setWorkinkSuccessMessage(`✓ Work.ink Step #${stepToVerify + 1} completed! Please continue to the next task.`);
           }
+
+          // Immediately persist fresh completion progress so tab-close/refresh retains it
+          try {
+            const updatedState = {
+              completedCpIds: newCompleted,
+              activeCpIndex: data.allCompleted ? checkpoints.length : stepToVerify + 1,
+              claimToken: data.claimToken || claimToken,
+              sessionId: storedSessionId,
+              workinkOpenedCpId: null,
+              savedAt: Date.now(),
+            };
+            localStorage.setItem(key, JSON.stringify(updatedState));
+            sessionStorage.setItem(key, JSON.stringify(updatedState));
+          } catch {}
 
           // Clean token from URL history cleanly
           const cleanUrl = new URL(window.location.href);
@@ -694,7 +730,43 @@ export default function ClaimKeyPage() {
       }
     }
 
-    // Open target task in new tab synchronously to avoid browser popup blockers
+    const isWorkink = Boolean(
+      cp.duration_seconds === 0 ||
+      cp.url?.includes("work.ink") ||
+      cp.url?.includes("workink.net") ||
+      (cp as any).is_workink
+    );
+
+    // Save state to localStorage immediately before navigation so tab-close/reload retains it
+    const key = `atom_cp_progress_${scriptSlug || "default"}`;
+    try {
+      const stateToPersist = {
+        completedCpIds,
+        activeCpIndex: index,
+        claimToken,
+        sessionId,
+        currentStepToken,
+        workinkOpenedCpId: cp.id,
+        powChallenge,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(key, JSON.stringify(stateToPersist));
+      sessionStorage.setItem(key, JSON.stringify(stateToPersist));
+    } catch {}
+
+    // For Work.ink: navigate in SAME TAB so returning from Work.ink brings them right back into this tab!
+    if (isWorkink) {
+      setWorkinkOpenedCpId(cp.id);
+      setTimerRunning(false);
+      setCurrentTimer(null);
+      setStepEndTime(null);
+      if (gatewayUrl) {
+        window.location.href = gatewayUrl;
+      }
+      return;
+    }
+
+    // For timed tasks: open destination in a new tab so the dwell timer ticks down on this page
     if (gatewayUrl) {
       window.open(gatewayUrl, "_blank", "noopener,noreferrer");
     }
@@ -722,26 +794,11 @@ export default function ClaimKeyPage() {
           setPowChallenge(data.powChallenge);
         }
 
-        const isWorkink = Boolean(
-          cp.duration_seconds === 0 ||
-          cp.url?.includes("work.ink") ||
-          cp.url?.includes("workink.net") ||
-          (cp as any).is_workink
-        );
-
-        if (isWorkink) {
-          // Zero-timer mode: Verified purely by Work.ink API redirect!
-          setWorkinkOpenedCpId(cp.id);
-          setTimerRunning(false);
-          setCurrentTimer(null);
-          setStepEndTime(null);
-        } else {
-          const dur = data.duration || cp.duration_seconds || 5;
-          const endTime = Date.now() + dur * 1000;
-          setStepEndTime(endTime);
-          setCurrentTimer(dur);
-          setTimerRunning(true);
-        }
+        const dur = data.duration || cp.duration_seconds || 5;
+        const endTime = Date.now() + dur * 1000;
+        setStepEndTime(endTime);
+        setCurrentTimer(dur);
+        setTimerRunning(true);
       } else {
         setError(data.error || "Failed to start checkpoint step.");
       }
@@ -1289,8 +1346,8 @@ export default function ClaimKeyPage() {
                                     {cp.title}
                                   </h4>
                                   {isWorkink && (
-                                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
-                                      <Zap className="w-2.5 h-2.5 text-yellow-300" />
+                                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1.5">
+                                      <WorkinkLogo className="w-3.5 h-3.5 flex-shrink-0" />
                                       Work.ink
                                     </span>
                                   )}
@@ -1300,8 +1357,8 @@ export default function ClaimKeyPage() {
                                     ? "Verified by Work.ink API ✓"
                                     : isWorkink
                                     ? workinkOpenedCpId === cp.id
-                                      ? "Task opened. Finish tasks in the opened tab to unlock..."
-                                      : "Complete Work.ink task in new tab (No timer required)"
+                                      ? "Task in progress. Complete on Work.ink to unlock automatically..."
+                                      : "Complete Work.ink task (No timer required)"
                                     : isCurrent && timerRunning
                                     ? `Wait ${currentTimer}s on the destination task page...`
                                     : `Visit task and spend ${cp.duration_seconds}s.`}
@@ -1333,8 +1390,8 @@ export default function ClaimKeyPage() {
                                         <ExternalLink className="w-3 h-3" />
                                         <span>Reopen</span>
                                       </button>
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-mono animate-pulse">
-                                        <Clock className="w-3 h-3 text-purple-400" />
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-mono animate-pulse">
+                                        <WorkinkLogo className="w-3 h-3 flex-shrink-0" />
                                         <span>Awaiting Task...</span>
                                       </span>
                                     </div>
@@ -1344,7 +1401,7 @@ export default function ClaimKeyPage() {
                                       onClick={() => handleStartCheckpoint(cp, idx)}
                                       className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-md active:scale-95"
                                     >
-                                      <Zap className="w-3.5 h-3.5 text-yellow-300" />
+                                      <WorkinkLogo className="w-3.5 h-3.5 flex-shrink-0" />
                                       <span>Go to Work.ink</span>
                                     </button>
                                   )
