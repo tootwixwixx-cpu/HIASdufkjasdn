@@ -141,7 +141,7 @@ export default function CheckpointsPage() {
       { id: "3", label: "Tamper Proof", icon: "shield", color: "#10b981" },
     ],
     socials: {
-      discord: "https://discord.gg/kGtqH3k2wN",
+      discord: "https://discord.gg/NdrTc27GxT",
       youtube: "https://youtube.com/@revile",
       twitter: "https://x.com/revile",
       x: "https://x.com/revile",

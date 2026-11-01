@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
         duration_hours: existingKey.duration_hours,
         bound_ip: existingKey.claimed_ip,
         expires_at: existingKey.expires_at,
-        discord_invite_url: settings.discord_invite_url || "https://discord.gg/AeCYnnQmq5",
+        discord_invite_url: settings.discord_invite_url || "https://discord.gg/NdrTc27GxT",
         message:
           "You have already claimed a license key for this script on your IP address. If you need another key, please join our Discord.",
       });
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       already_claimed: false,
-      discord_invite_url: settings.discord_invite_url || "https://discord.gg/AeCYnnQmq5",
+      discord_invite_url: settings.discord_invite_url || "https://discord.gg/NdrTc27GxT",
     });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Error checking active key";

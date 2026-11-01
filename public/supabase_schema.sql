@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS public.loader_configs (
     claim_button_text TEXT DEFAULT 'CLAIM YOUR KEY (COPY LINK)',
     show_discord_button BOOLEAN DEFAULT false,
     discord_button_text TEXT DEFAULT 'JOIN DISCORD',
-    discord_invite_url TEXT DEFAULT 'https://discord.gg/kGtqH3k2wN',
+    discord_invite_url TEXT DEFAULT 'https://discord.gg/NdrTc27GxT',
     show_watermark BOOLEAN DEFAULT true,
     watermark_text TEXT DEFAULT 'ATOMPROTECT',
     status_verifying TEXT DEFAULT 'Checking license key...',
@@ -363,7 +363,7 @@ CREATE TABLE IF NOT EXISTS public.creator_profile (
     raw_avatar_url TEXT DEFAULT NULL,
     accent_color TEXT DEFAULT '#00a2ff',
     emblems JSONB NOT NULL DEFAULT '[{"id":"1","label":"Verified Developer","icon":"verified","color":"#3b82f6"},{"id":"2","label":"Founder","icon":"crown","color":"#eab308"},{"id":"3","label":"Tamper Proof","icon":"shield","color":"#10b981"}]'::jsonb,
-    socials JSONB NOT NULL DEFAULT '{"discord":"https://discord.gg/kGtqH3k2wN","youtube":"https://youtube.com/@revile","twitter":"https://x.com/revile","github":"https://github.com/"}'::jsonb,
+    socials JSONB NOT NULL DEFAULT '{"discord":"https://discord.gg/NdrTc27GxT","youtube":"https://youtube.com/@revile","twitter":"https://x.com/revile","github":"https://github.com/"}'::jsonb,
     social_toggles JSONB NOT NULL DEFAULT '{}'::jsonb,
     badge_toggles JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
@@ -437,7 +437,7 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
     checkpoint_delay_seconds INTEGER NOT NULL DEFAULT 5,
     discord_guild_id TEXT DEFAULT '',
     discord_bot_token TEXT DEFAULT '',
-    discord_invite_url TEXT DEFAULT 'https://discord.gg/kGtqH3k2wN',
+    discord_invite_url TEXT DEFAULT 'https://discord.gg/NdrTc27GxT',
     vpn_detection_enabled BOOLEAN NOT NULL DEFAULT true,
     chatroom_cooldown_seconds INTEGER NOT NULL DEFAULT 3,
     tos_content TEXT NOT NULL DEFAULT '1. Acceptance of Terms: By obtaining or using any script or key from this service, you agree to these Terms.
@@ -627,7 +627,7 @@ INSERT INTO public.checkpoints (id, script_id, title, url, duration_seconds, "or
 VALUES 
     ('52097de7-6136-4da0-b9b9-f21612689848', 'all', 'Subscribe on YouTube', 'https://www.youtube.com/@lollll-k5d', 10, 1),
     ('a5397f93-3f27-41b3-b68d-83ae68aa783b', 'all', 'Like & Comment Video', 'https://www.youtube.com/watch?v=Z6DbPPkLlq4', 45, 2),
-    ('add593ab-7e23-45a8-9d57-798c4cb0b9cd', 'all', 'Join Community Discord', 'https://discord.gg/kGtqH3k2wN', 45, 3)
+    ('add593ab-7e23-45a8-9d57-798c4cb0b9cd', 'all', 'Join Community Discord', 'https://discord.gg/NdrTc27GxT', 45, 3)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================

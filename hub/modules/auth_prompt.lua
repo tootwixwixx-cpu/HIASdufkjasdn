@@ -20,7 +20,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local CORRECT_KEY = "THEBESTFIXED"
 local GET_KEY_URL = "https://atomprotect.vercel.app"
-local DISCORD_INVITE = "https://discord.gg/AeCYnnQmq5"
+local DISCORD_INVITE = "https://discord.gg/NdrTc27GxT"
 
 local AuthPrompt = {}
 

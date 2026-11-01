@@ -12,7 +12,7 @@ export async function GET() {
     const sanitized = {
       claim_method: settings.claim_method || "checkpoints",
       checkpoint_delay_seconds: settings.checkpoint_delay_seconds ?? 5,
-      discord_invite_url: settings.discord_invite_url || "https://discord.gg/AeCYnnQmq5",
+      discord_invite_url: settings.discord_invite_url || "https://discord.gg/NdrTc27GxT",
       vpn_detection_enabled: Boolean(settings.vpn_detection_enabled),
       tos_content: settings.tos_content || "",
     };

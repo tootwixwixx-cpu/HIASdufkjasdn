@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
                 id: "default-verification",
                 script_id: "all",
                 title: "Security Verification",
-                url: "https://discord.gg/AeCYnnQmq5",
+                url: "https://discord.gg/NdrTc27GxT",
                 duration_seconds: 5,
                 order: 1,
                 created_at: new Date().toISOString(),
