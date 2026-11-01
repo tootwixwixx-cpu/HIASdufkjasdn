@@ -248,9 +248,8 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({
-        success: true,
-        message: "Work.ink task verified successfully!",
         ...result,
+        message: "Work.ink task verified successfully!",
       });
     }
 
