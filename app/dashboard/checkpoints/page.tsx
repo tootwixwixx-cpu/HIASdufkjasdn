@@ -450,11 +450,16 @@ export default function CheckpointsPage() {
     if (!confirm("Are you sure you want to delete this checkpoint?")) return;
     try {
       const res = await fetch(`/api/checkpoints?id=${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setCheckpoints((prev) => prev.filter((cp) => cp.id !== id));
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.error || "Failed to delete checkpoint from database.");
       }
-    } catch (err) {
+      setCheckpoints((prev) => prev.filter((cp) => cp.id !== id));
+      fetchCheckpoints();
+    } catch (err: unknown) {
       console.error("Error deleting checkpoint", err);
+      const msg = err instanceof Error ? err.message : "Error deleting checkpoint";
+      setCheckpointError(msg);
     }
   };
 
@@ -680,13 +685,24 @@ export default function CheckpointsPage() {
                 </p>
                 <div className="flex items-center gap-1.5 bg-[#090a10] border border-purple-500/40 rounded-lg p-1.5 px-2 font-mono text-[11px] text-purple-200 justify-between">
                   <span className="truncate select-all">
-                    {typeof window !== "undefined" ? `${window.location.origin}/claim` : "https://yourdomain.com/claim"}
+                    {(() => {
+                      const base = typeof window !== "undefined" ? window.location.origin : "https://atomprotect.vercel.app";
+                      const selScript = scripts.find((s) => s.id === cpScriptId);
+                      return selScript && cpScriptId !== "all"
+                        ? `${base}/claim?script=${selScript.slug}&token={TOKEN}`
+                        : `${base}/claim?token={TOKEN}`;
+                    })()}
                   </span>
                   <button
                     type="button"
                     onClick={() => {
                       if (typeof window !== "undefined") {
-                        navigator.clipboard.writeText(`${window.location.origin}/claim`);
+                        const base = window.location.origin;
+                        const selScript = scripts.find((s) => s.id === cpScriptId);
+                        const full = selScript && cpScriptId !== "all"
+                          ? `${base}/claim?script=${selScript.slug}&token={TOKEN}`
+                          : `${base}/claim?token={TOKEN}`;
+                        navigator.clipboard.writeText(full);
                         setDestinationCopied(true);
                         setTimeout(() => setDestinationCopied(false), 2000);
                       }

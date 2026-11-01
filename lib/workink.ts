@@ -24,7 +24,10 @@ export async function verifyWorkinkToken(
   const apiKey = process.env.WORKINK_API_KEY;
 
   try {
-    const url = `https://work.ink/_api/v2/token/isValid/${encodeURIComponent(cleanToken)}?deleteToken=1`;
+    const endpoint = apiKey
+      ? `https://work.ink/_api/v2/token/verify/${encodeURIComponent(cleanToken)}?deleteToken=1`
+      : `https://work.ink/_api/v2/token/isValid/${encodeURIComponent(cleanToken)}?deleteToken=1`;
+
     const headers: Record<string, string> = {
       "User-Agent": "AtomProtect-KeySystem/2.0",
       "Accept": "application/json",
@@ -32,14 +35,25 @@ export async function verifyWorkinkToken(
 
     if (apiKey) {
       headers["X-Api-Key"] = apiKey;
-      headers["Authorization"] = `Bearer ${apiKey}`;
     }
 
-    const res = await fetch(url, {
+    let res = await fetch(endpoint, {
       method: "GET",
       headers,
       cache: "no-store",
     });
+
+    // If authenticated endpoint returned 401 or 403, fallback to isValid endpoint
+    if (!res.ok && apiKey) {
+      res = await fetch(
+        `https://work.ink/_api/v2/token/isValid/${encodeURIComponent(cleanToken)}?deleteToken=1`,
+        {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+          cache: "no-store",
+        }
+      );
+    }
 
     if (!res.ok) {
       if (res.status === 404 || res.status === 400) {

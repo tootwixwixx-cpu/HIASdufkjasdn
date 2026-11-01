@@ -366,8 +366,19 @@ export default function ClaimKeyPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const slug = params.get("script") || "";
-    const cid = params.get("hwid") || params.get("claim_id") || params.get("id") || "";
+    let slug = params.get("script") || "";
+    if (slug) {
+      try { sessionStorage.setItem("atom_last_script", slug); } catch {}
+    } else {
+      try { slug = sessionStorage.getItem("atom_last_script") || ""; } catch {}
+    }
+
+    let cid = params.get("hwid") || params.get("claim_id") || params.get("id") || "";
+    if (cid) {
+      try { sessionStorage.setItem("atom_last_hwid", cid); } catch {}
+    } else {
+      try { cid = sessionStorage.getItem("atom_last_hwid") || ""; } catch {}
+    }
 
     setScriptSlug(slug);
     setClaimId(cid);

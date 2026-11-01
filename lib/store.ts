@@ -797,7 +797,7 @@ export const dbService = {
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.from("keys").select("*").order("created_at", { ascending: false });
-        if (data && !error && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           return data;
         }
       } catch (err) {
@@ -3009,7 +3009,7 @@ export const dbService = {
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.from("checkpoints").select("*").order("order", { ascending: true });
-        if (data && !error && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           return data;
         }
       } catch (err) {
@@ -3054,18 +3054,21 @@ export const dbService = {
 
   async deleteCheckpoint(id: string): Promise<boolean> {
     const db = readLocalDb();
-    if (!db.checkpoints) return false;
-    const initialLen = db.checkpoints.length;
-    db.checkpoints = db.checkpoints.filter((cp) => cp.id !== id);
-    if (db.checkpoints.length !== initialLen) {
+    if (db.checkpoints) {
+      db.checkpoints = db.checkpoints.filter((cp) => cp.id !== id);
       writeLocalDb(db);
     }
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from("checkpoints").delete().eq("id", id);
+        const { error } = await supabase.from("checkpoints").delete().eq("id", id);
+        if (error) {
+          console.error("Supabase deleteCheckpoint error:", error);
+          throw new Error(error.message);
+        }
       } catch (err) {
         console.error("Supabase deleteCheckpoint error:", err);
+        throw err;
       }
     }
     return true;
