@@ -1,0 +1,186 @@
+--[[
+    AtomWare Giant Script Hub (700+ Games) - Core Orchestrator Module
+    Auto-detects game by PlaceId, verifies auth key, runs loadstring,
+    mounts persistent watermark and draggable search/gamehop widget.
+]]
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer or (function()
+    local p = Players.PlayerAdded:Wait()
+    return p
+end)()
+
+local function getGuiParent()
+    local success, target = pcall(function()
+        local test = Instance.new("Folder")
+        test.Parent = CoreGui
+        test:Destroy()
+        return CoreGui
+    end)
+    if success and target then
+        return target
+    end
+    local lp = Players.LocalPlayer
+    if lp then
+        return lp:FindFirstChild("PlayerGui") or lp:WaitForChild("PlayerGui", 5)
+    end
+    return nil
+end
+
+local function runAtomwareHub(GamesDatabase, Notification, Telemetry, AuthPrompt, SearchWidget, Watermark, ChatroomWidget)
+    -- Guard against duplicate executions
+    if _G.AtomwareHubLoaded == true then
+        if Notification then
+            Notification:Show("AtomWare Active", "AtomWare is already running! Use the 🔍 icon.", 3, "Info")
+        end
+        return
+    end
+    _G.AtomwareHubLoaded = true
+
+    -- Initialize Watermark, Floating Search Widget & Chatroom Widget immediately
+    pcall(function()
+        if Watermark and type(Watermark.Init) == "function" then
+            Watermark:Init()
+        end
+    end)
+
+    pcall(function()
+        if SearchWidget and type(SearchWidget.Init) == "function" then
+            SearchWidget:Init(GamesDatabase, Notification, AuthPrompt, Telemetry)
+        end
+    end)
+
+    pcall(function()
+        if ChatroomWidget and type(ChatroomWidget.Init) == "function" then
+            ChatroomWidget:Init(Notification)
+        end
+    end)
+
+    -- Auto-detect Current Game
+    local currentPlaceId = game.PlaceId
+    local matchedGame = GamesDatabase:GetByPlaceId(currentPlaceId)
+
+    if matchedGame then
+        Notification:Show("Game Detected", "Supported game found: " .. matchedGame.Name, 4, "Info")
+
+        local function executeScript(selectedScript)
+            local scriptToRun = selectedScript or matchedGame
+            local function doLaunch()
+                Notification:Show("Executing Script", "Launching " .. matchedGame.Name .. " (" .. (scriptToRun.Title or "Default") .. ")...", 3, "Success")
+
+                -- Safely execute the game loadstring
+                task.spawn(function()
+                    local loadFunc, compileErr = loadstring(scriptToRun.Loadstring)
+                    if not loadFunc then
+                        Notification:Show("Compile Error", "Failed to compile: " .. tostring(compileErr), 5, "Error")
+                        return
+                    end
+
+                    local ok, runErr = pcall(loadFunc)
+                    if not ok then
+                        Notification:Show("Runtime Error", "Error executing: " .. tostring(runErr), 5, "Error")
+                    end
+                end)
+            end
+
+            -- If already verified through AtomProtect website loader, run directly
+            if _G.AtomwareAuthed == true or _G.AtomwareKeyVerified == true then
+                doLaunch()
+            else
+                -- Otherwise prompt key modal
+                AuthPrompt:Prompt(matchedGame.Name, matchedGame.PlaceId, Notification, Telemetry, doLaunch)
+            end
+        end
+
+        -- If multiple scripts exist for this game, prompt user to choose
+        if matchedGame.Scripts and #matchedGame.Scripts > 1 and type(AuthPrompt.PromptScriptSelection) == "function" then
+            Notification:Show("Multiple Scripts", "Found " .. tostring(#matchedGame.Scripts) .. " scripts for " .. matchedGame.Name .. "! Please select one.", 4, "Info")
+            AuthPrompt:PromptScriptSelection(matchedGame, function(chosen)
+                executeScript(chosen)
+            end)
+        else
+            local single = (matchedGame.Scripts and matchedGame.Scripts[1]) or matchedGame
+            executeScript(single)
+        end
+    else
+        -- Game is not in the 407+ supported list
+        Notification:Show(
+            "Unsupported Game",
+            "The game you are in (Place ID: " .. tostring(currentPlaceId) .. ") is not yet supported by AtomWare.",
+            7,
+            "Warning"
+        )
+
+        -- Display an informative notice modal with quick access to search
+        local parent = getGuiParent()
+        local noticeGui = Instance.new("ScreenGui")
+        noticeGui.Name = "Atomware_UnsupportedNotice"
+        noticeGui.ResetOnSpawn = false
+        noticeGui.DisplayOrder = 940
+        noticeGui.Parent = parent
+
+        local modal = Instance.new("Frame")
+        modal.Name = "NoticeModal"
+        modal.AnchorPoint = Vector2.new(0.5, 0.5)
+        modal.Position = UDim2.new(0.5, 0, 0.5, 0)
+        modal.Size = UDim2.new(0, 420, 0, 220)
+        modal.BackgroundColor3 = Color3.fromRGB(20, 22, 32)
+        modal.BorderSizePixel = 0
+        modal.Parent = noticeGui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 12)
+        corner.Parent = modal
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(240, 160, 40)
+        stroke.Thickness = 1.5
+        stroke.Parent = modal
+
+        local title = Instance.new("TextLabel")
+        title.Size = UDim2.new(1, -32, 0, 30)
+        title.Position = UDim2.new(0, 16, 0, 16)
+        title.BackgroundTransparency = 1
+        title.Text = "⚠️ Game Not Supported Yet"
+        title.TextColor3 = Color3.fromRGB(255, 255, 255)
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 18
+        title.TextXAlignment = Enum.TextXAlignment.Center
+        title.Parent = modal
+
+        local desc = Instance.new("TextLabel")
+        desc.Size = UDim2.new(1, -32, 0, 60)
+        desc.Position = UDim2.new(0, 16, 0, 52)
+        desc.BackgroundTransparency = 1
+        desc.Text = "The game you are in (Place ID: " .. tostring(currentPlaceId) .. ") is not yet supported by AtomWare.\n\nUse the floating 🔍 button on your screen to explore 700+ supported games and hop to them!"
+        desc.TextColor3 = Color3.fromRGB(170, 175, 195)
+        desc.Font = Enum.Font.Gotham
+        desc.TextSize = 13
+        desc.TextWrapped = true
+        desc.Parent = modal
+
+        local dismissBtn = Instance.new("TextButton")
+        dismissBtn.Size = UDim2.new(1, -32, 0, 40)
+        dismissBtn.Position = UDim2.new(0, 16, 1, -56)
+        dismissBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242)
+        dismissBtn.Text = "Got it (Keep 🔍 Search Active)"
+        dismissBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        dismissBtn.Font = Enum.Font.GothamBold
+        dismissBtn.TextSize = 13
+        dismissBtn.AutoButtonColor = false
+        dismissBtn.Parent = modal
+
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 8)
+        btnCorner.Parent = dismissBtn
+
+        dismissBtn.MouseButton1Click:Connect(function()
+            noticeGui:Destroy()
+        end)
+    end
+end
+
+return runAtomwareHub
