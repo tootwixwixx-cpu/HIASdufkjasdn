@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Checkpoint destination URL is required." }, { status: 400 });
     }
 
-    const duration = Math.max(1, Number(duration_seconds) || 5);
+    const isWorkink = url.includes("work.ink") || url.includes("workink.net") || Number(duration_seconds) === 0;
+    const duration = isWorkink ? 0 : Math.max(1, Number(duration_seconds) || 5);
     const orderNum = Number(order) || 1;
 
     const saved = await dbService.saveCheckpoint({

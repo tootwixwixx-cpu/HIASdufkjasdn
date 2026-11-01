@@ -387,6 +387,52 @@ export const antiBypassService = {
     }
   },
 
+  /**
+   * Verifies completion of a checkpoint step via an authenticated Work.ink token.
+   * If valid, advances the step or issues the final claimToken.
+   */
+  completeWorkinkStep(
+    sessionId: string,
+    stepIndex: number,
+    totalSteps: number,
+    scriptId: string,
+    ip: string
+  ): {
+    success: boolean;
+    allCompleted: boolean;
+    nextStep?: number;
+    nextPowChallenge?: { nonce: string; difficulty: number };
+    claimToken?: string;
+  } {
+    const isLastStep = stepIndex >= totalSteps - 1;
+
+    if (isLastStep) {
+      const claimPayload: ClaimTokenPayload = {
+        t: "claim",
+        sid: sessionId,
+        scriptId,
+        ip,
+        completedAt: Date.now(),
+        exp: Date.now() + 15 * 60 * 1000,
+      };
+      const claimToken = createSignedToken(claimPayload);
+      return {
+        success: true,
+        allCompleted: true,
+        claimToken,
+      };
+    } else {
+      const nextStepIndex = stepIndex + 1;
+      const nextPow = generatePoWChallenge(3);
+      return {
+        success: true,
+        allCompleted: false,
+        nextStep: nextStepIndex,
+        nextPowChallenge: nextPow,
+      };
+    }
+  },
+
   verifyAndConsumeClaimToken(
     sessionId: string,
     claimToken: string,

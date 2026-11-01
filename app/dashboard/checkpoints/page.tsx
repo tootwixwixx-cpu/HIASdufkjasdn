@@ -11,6 +11,7 @@ import {
   Clock,
   Save,
   Check,
+  Copy,
   AlertCircle,
   User,
   Shield,
@@ -122,6 +123,8 @@ export default function CheckpointsPage() {
   const [cpUrl, setCpUrl] = useState("");
   const [cpDuration, setCpDuration] = useState<number>(5);
   const [cpOrder, setCpOrder] = useState<number>(1);
+  const [isWorkinkType, setIsWorkinkType] = useState<boolean>(false);
+  const [destinationCopied, setDestinationCopied] = useState<boolean>(false);
   const [savingCheckpoint, setSavingCheckpoint] = useState(false);
   const [checkpointError, setCheckpointError] = useState<string | null>(null);
   const [checkpointSuccess, setCheckpointSuccess] = useState(false);
@@ -372,7 +375,19 @@ export default function CheckpointsPage() {
     setCpTitle("");
     setCpUrl("");
     setCpDuration(5);
+    setIsWorkinkType(false);
     setCpOrder(checkpoints.length + 1);
+    setCheckpointError(null);
+  };
+
+  const switchToWorkinkMode = () => {
+    setEditingId(null);
+    setIsWorkinkType(true);
+    setCpDuration(0);
+    const nextOrder = checkpoints.length + 1;
+    setCpOrder(nextOrder);
+    setCpTitle(`Work.ink Task #${nextOrder}`);
+    setCpUrl("");
     setCheckpointError(null);
   };
 
@@ -381,7 +396,9 @@ export default function CheckpointsPage() {
     setCpScriptId(cp.script_id || "all");
     setCpTitle(cp.title);
     setCpUrl(cp.url);
-    setCpDuration(cp.duration_seconds || 5);
+    const isWk = cp.duration_seconds === 0 || cp.url.includes("work.ink");
+    setIsWorkinkType(isWk);
+    setCpDuration(isWk ? 0 : cp.duration_seconds || 5);
     setCpOrder(cp.order || 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -409,7 +426,7 @@ export default function CheckpointsPage() {
           script_id: cpScriptId,
           title: cpTitle.trim(),
           url: cpUrl.trim(),
-          duration_seconds: cpDuration,
+          duration_seconds: (isWorkinkType || cpUrl.includes("work.ink")) ? 0 : cpDuration,
           order: cpOrder,
         }),
       });
@@ -613,6 +630,79 @@ export default function CheckpointsPage() {
               </div>
             )}
 
+            {/* Mode Switcher: Standard vs Work.ink */}
+            <div className="grid grid-cols-2 gap-2 p-1 bg-[#090a10] border border-gray-800 rounded-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsWorkinkType(false);
+                  setCpDuration(15);
+                  if (cpTitle.startsWith("Work.ink Task")) setCpTitle("");
+                }}
+                className={`py-2 px-3 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                  !isWorkinkType
+                    ? "bg-gray-800 text-white shadow-sm"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <span>Standard Link</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={switchToWorkinkMode}
+                className={`py-2 px-3 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                  isWorkinkType
+                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30"
+                    : "text-purple-300 hover:text-white bg-purple-500/10 border border-purple-500/20"
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-yellow-300" />
+                <span>⚡ Work.ink Setup</span>
+              </button>
+            </div>
+
+            {/* Work.ink Setup Guidance Card */}
+            {isWorkinkType && (
+              <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/30 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-yellow-300" />
+                    Work.ink API Task (No Timer)
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/40">
+                    API Verified
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-300">
+                  In your Work.ink dashboard, set your link's <strong>Target / Destination URL</strong> to:
+                </p>
+                <div className="flex items-center gap-1.5 bg-[#090a10] border border-purple-500/40 rounded-lg p-1.5 px-2 font-mono text-[11px] text-purple-200 justify-between">
+                  <span className="truncate select-all">
+                    {typeof window !== "undefined" ? `${window.location.origin}/claim` : "https://yourdomain.com/claim"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        navigator.clipboard.writeText(`${window.location.origin}/claim`);
+                        setDestinationCopied(true);
+                        setTimeout(() => setDestinationCopied(false), 2000);
+                      }
+                    }}
+                    className="p-1 rounded hover:bg-purple-500/20 text-purple-300 transition-colors flex-shrink-0"
+                    title="Copy Destination URL"
+                  >
+                    {destinationCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-400">
+                  Players are returned with a secure token. The human slider is unlocked <strong>strictly after Work.ink confirms completion</strong>.
+                </p>
+              </div>
+            )}
+
             <form onSubmit={handleSaveCheckpoint} className="space-y-4 text-xs">
               {/* Target Script Selector */}
               <div>
@@ -645,7 +735,7 @@ export default function CheckpointsPage() {
                   type="text"
                   value={cpTitle}
                   onChange={(e) => setCpTitle(e.target.value)}
-                  placeholder="e.g. Visit Community Sponsor, Subscribe on YouTube"
+                  placeholder={isWorkinkType ? "e.g. Work.ink Step #1" : "e.g. Visit Community Sponsor, Subscribe on YouTube"}
                   className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500"
                 />
               </div>
@@ -653,40 +743,55 @@ export default function CheckpointsPage() {
               {/* Destination URL */}
               <div>
                 <label className="block text-gray-300 font-semibold mb-1">
-                  Destination Link (URL)
+                  {isWorkinkType ? "Work.ink Shortlink (URL)" : "Destination Link (URL)"}
                 </label>
                 <div className="relative">
                   <input
                     type="url"
                     value={cpUrl}
                     onChange={(e) => setCpUrl(e.target.value)}
-                    placeholder="https://linkvertise.com/... or https://discord.gg/..."
+                    placeholder={isWorkinkType ? "https://work.ink/..." : "https://linkvertise.com/... or https://discord.gg/..."}
                     className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 pr-9"
                   />
                   <Link2 className="w-4 h-4 text-gray-500 absolute right-2.5 top-2.5" />
                 </div>
                 <p className="text-[10px] text-gray-500 mt-1">
-                  Users click this link in a new tab to complete this checkpoint step.
+                  {isWorkinkType
+                    ? "Paste your monetized Work.ink link generated in your publisher dashboard."
+                    : "Users click this link in a new tab to complete this checkpoint step."}
                 </p>
               </div>
 
               {/* Duration and Order */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="flex justify-between text-gray-300 font-semibold mb-1">
-                    <span>Duration (Timer)</span>
-                    <span className="font-mono text-emerald-400">{cpDuration}s</span>
+                {isWorkinkType ? (
+                  <div>
+                    <label className="block text-gray-300 font-semibold mb-1">
+                      Timer Setting
+                    </label>
+                    <div className="w-full bg-[#0d0f17] border border-purple-500/40 rounded-lg px-3 py-2 text-purple-300 flex items-center gap-1.5 font-mono text-xs">
+                      <Zap className="w-3.5 h-3.5 text-yellow-300" />
+                      <span>No Timer (API)</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Verified by Work.ink server.</p>
                   </div>
-                  <input
-                    type="number"
-                    min="1"
-                    max="120"
-                    value={cpDuration}
-                    onChange={(e) => setCpDuration(Number(e.target.value))}
-                    className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500"
-                  />
-                  <p className="text-[10px] text-gray-500 mt-0.5">Seconds to wait</p>
-                </div>
+                ) : (
+                  <div>
+                    <div className="flex justify-between text-gray-300 font-semibold mb-1">
+                      <span>Duration (Timer)</span>
+                      <span className="font-mono text-emerald-400">{cpDuration}s</span>
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      value={cpDuration}
+                      onChange={(e) => setCpDuration(Number(e.target.value))}
+                      className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-0.5">Seconds to wait</p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-gray-300 font-semibold mb-1">
@@ -700,21 +805,25 @@ export default function CheckpointsPage() {
                     onChange={(e) => setCpOrder(Number(e.target.value))}
                     className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500"
                   />
-                  <p className="text-[10px] text-gray-500 mt-0.5">Execution sequence</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Step sequence (#1, #2, #3)</p>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={savingCheckpoint}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
+                  isWorkinkType
+                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-600/20"
+                    : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20"
+                }`}
               >
                 {savingCheckpoint ? (
                   <span>Saving...</span>
                 ) : (
                   <>
-                    <Save className="w-4 h-4" />
-                    <span>{editingId ? "Update Checkpoint" : "Add Checkpoint"}</span>
+                    {isWorkinkType ? <Zap className="w-4 h-4 text-yellow-300" /> : <Save className="w-4 h-4" />}
+                    <span>{editingId ? "Update Checkpoint" : isWorkinkType ? "Add Work.ink Checkpoint" : "Add Checkpoint"}</span>
                   </>
                 )}
               </button>
@@ -730,7 +839,15 @@ export default function CheckpointsPage() {
                 <span className="text-[11px] text-gray-500">({filteredCheckpoints.length})</span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={switchToWorkinkMode}
+                  className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-[11px] transition-all flex items-center gap-1 shadow-sm"
+                >
+                  <Zap className="w-3 h-3 text-yellow-300" />
+                  <span>+ Work.ink Checkpoint</span>
+                </button>
                 <span className="text-[11px] text-gray-400">Filter:</span>
                 <select
                   value={filterScript}
@@ -755,13 +872,20 @@ export default function CheckpointsPage() {
               <div className="space-y-3">
                 {filteredCheckpoints.map((cp, idx) => {
                   const boundScript = scripts.find((s) => s.id === cp.script_id);
+                  const isWk = cp.duration_seconds === 0 || cp.url.includes("work.ink");
                   return (
                     <div
                       key={cp.id}
                       className="p-4 bg-[#12141e] border border-gray-800 hover:border-gray-700 rounded-xl flex items-center justify-between gap-4 transition-all"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-mono text-xs font-bold flex-shrink-0">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono text-xs font-bold flex-shrink-0 ${
+                            isWk
+                              ? "bg-purple-500/10 border border-purple-500/30 text-purple-300"
+                              : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                          }`}
+                        >
                           #{cp.order || idx + 1}
                         </div>
                         <div className="min-w-0">
@@ -778,10 +902,17 @@ export default function CheckpointsPage() {
                             </span>
                           </div>
                           <div className="flex items-center gap-3 text-[11px] text-gray-400 mt-1 truncate">
-                            <span className="flex items-center gap-1 font-mono text-emerald-400/90">
-                              <Clock className="w-3 h-3" />
-                              {cp.duration_seconds}s timer
-                            </span>
+                            {isWk ? (
+                              <span className="flex items-center gap-1 font-mono text-purple-300 font-semibold text-[11px] px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/30">
+                                <Zap className="w-3 h-3 text-yellow-300" />
+                                Work.ink (No Timer • API Verified)
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 font-mono text-emerald-400/90 text-[11px]">
+                                <Clock className="w-3 h-3" />
+                                {cp.duration_seconds}s timer
+                              </span>
+                            )}
                             <a
                               href={cp.url}
                               target="_blank"

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { getClientIp } from "@/lib/ip";
 import { antiBypassService } from "@/lib/anti-bypass";
+import { verifyWorkinkToken } from "@/lib/workink";
 
 export const dynamic = "force-dynamic";
 
@@ -196,6 +197,59 @@ export async function POST(req: NextRequest) {
       }
 
       return NextResponse.json({
+        ...result,
+      });
+    }
+
+    // ACTION: VERIFY WORKINK TOKEN (Strict API validation with ?deleteToken=1)
+    if (action === "verify_workink") {
+      const { token, sessionId, stepIndex, script_id, totalSteps } = body;
+
+      if (!token || typeof token !== "string") {
+        return NextResponse.json(
+          { success: false, error: "Missing required Work.ink completion token." },
+          { status: 400 }
+        );
+      }
+
+      // Verify token with Work.ink API (burns single-use token on Work.ink server)
+      const workinkResult = await verifyWorkinkToken(token, ip);
+      if (!workinkResult.valid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: workinkResult.error || "Work.ink tasks have not been completed yet. Please finish the tasks to proceed.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const currentStep = typeof stepIndex === "number" ? stepIndex : 0;
+      const total = typeof totalSteps === "number" ? totalSteps : 1;
+
+      const result = antiBypassService.completeWorkinkStep(
+        sessionId || "workink-session",
+        currentStep,
+        total,
+        script_id || "all",
+        ip
+      );
+
+      if (result.allCompleted) {
+        await dbService.recordCheckpoint("completed", ip, script_id || undefined, {
+          stepIndex: currentStep,
+          checkpointTitle: "Work.ink Task Completed",
+        });
+      } else {
+        await dbService.recordCheckpoint("step_completed", ip, script_id || undefined, {
+          stepIndex: currentStep,
+          checkpointTitle: "Work.ink Step Completed",
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Work.ink task verified successfully!",
         ...result,
       });
     }
