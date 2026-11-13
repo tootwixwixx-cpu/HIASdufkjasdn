@@ -2,12 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+// SECURITY: this endpoint fetches a server-supplied URL and returns the bytes to the
+// caller — without a host allowlist it's an open SSRF-capable proxy (can be used to
+// probe/reach internal network addresses or any external host from the server's own
+// IP). Only the hosts this feature actually needs are allowed.
+const ALLOWED_AVATAR_HOSTS = new Set([
+  "tr.rbxcdn.com",
+  "images.rbxcdn.com",
+  "t0.rbxcdn.com",
+  "t1.rbxcdn.com",
+  "t2.rbxcdn.com",
+  "t3.rbxcdn.com",
+  "t4.rbxcdn.com",
+  "t5.rbxcdn.com",
+  "t6.rbxcdn.com",
+  "t7.rbxcdn.com",
+  "r2.guns.lol",
+  "guns.lol",
+  "cdn.guns.lol",
+]);
+
+function isAllowedAvatarUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    return ALLOWED_AVATAR_HOSTS.has(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const targetUrl = searchParams.get("url");
 
-  if (!targetUrl || !/^https?:\/\//i.test(targetUrl)) {
-    return new NextResponse("Invalid URL", { status: 400 });
+  if (!targetUrl || !isAllowedAvatarUrl(targetUrl)) {
+    return new NextResponse("Invalid or disallowed URL", { status: 400 });
   }
 
   try {

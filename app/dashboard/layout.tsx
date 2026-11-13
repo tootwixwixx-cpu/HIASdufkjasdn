@@ -8,15 +8,11 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#08090E] text-zinc-100 flex flex-col md:flex-row selection:bg-cyan-500 selection:text-black">
-      {/* Dynamic Fitted Navigation Sidebar */}
+    <div className="flex min-h-screen flex-col bg-canvas text-fg selection:bg-accent/30 selection:text-fg md:flex-row">
       <DashboardNav />
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto min-w-0 bg-[#08090E]">
-        <div className="max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
-          {children}
-        </div>
+      <main className="min-w-0 flex-1 overflow-y-auto bg-canvas">
+        <div className="mx-auto max-w-[1600px] p-3 sm:p-4 lg:p-6">{children}</div>
       </main>
     </div>
   );

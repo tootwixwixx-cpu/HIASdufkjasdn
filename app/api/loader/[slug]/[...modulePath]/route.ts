@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
 import { wrapPolymorphicLuau } from "@/lib/polymorphic";
+import { getClientIp, normalizeIp } from "@/lib/ip";
 
 function isBrowserRequest(req: NextRequest): boolean {
   const accept = req.headers.get("accept") || "";
@@ -39,15 +40,15 @@ function isBrowserRequest(req: NextRequest): boolean {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { slug: string; modulePath: string[] } }
+  { params }: { params: Promise<{ slug: string; modulePath: string[] }> }
 ) {
-  const { slug, modulePath } = params;
+  const { slug, modulePath } = await params;
   const script = await dbService.getScriptBySlug(slug);
 
   if (isBrowserRequest(req)) {
     return new NextResponse(
       `<!DOCTYPE html><html><body style="background:#0b0d14;color:#fff;font-family:sans-serif;text-align:center;padding:50px;">
-        <h2>🛡️ Direct Module Access Protected</h2>
+        <h2>ðŸ›¡ï¸ Direct Module Access Protected</h2>
         <p>This module can only be loaded within authorized Roblox executors.</p>
         <p><a href="/claim?script=${encodeURIComponent(slug)}" style="color:#60a5fa;">Claim Key</a></p>
       </body></html>`,
@@ -63,7 +64,7 @@ export async function GET(
   }
 
   // Authorization gate: If script requires auth and requester is not admin, verify key or session
-  if (script.use_auth !== false && !isAuthenticated()) {
+  if (script.use_auth !== false && !(await isAuthenticated())) {
     const { searchParams } = new URL(req.url);
     const key = searchParams.get("key") || req.headers.get("x-license-key");
     const sessionToken =
@@ -72,6 +73,7 @@ export async function GET(
       req.headers.get("x-session-id");
 
     let isAuthorized = false;
+    const requestIp = normalizeIp(getClientIp(req));
 
     if (sessionToken) {
       if (sessionToken.startsWith("staff_review")) {
@@ -81,7 +83,13 @@ export async function GET(
         const active = sessions.find(
           (s) => s.id === sessionToken && s.script_id === script.id && s.status === "active"
         );
-        if (active) isAuthorized = true;
+        // SECURITY: bind this to the IP that originally started the session, same as
+        // the main /api/auth/verify flow does for key claims — a bare session id alone
+        // (e.g. leaked/logged) shouldn't be enough to pull every individual module's
+        // raw source from a different machine.
+        if (active && (!active.ip_address || normalizeIp(active.ip_address) === requestIp)) {
+          isAuthorized = true;
+        }
       }
     }
 

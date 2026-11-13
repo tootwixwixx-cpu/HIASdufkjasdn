@@ -97,39 +97,62 @@ export function bundleModularScript(bundle: ModuleBundle): string {
     local _streamBase = "${baseUrl}/api/loader/${slug}/"
     local _sessionToken = "${sessionToken}"
     local _licenseKey = "${encodeURIComponent(key)}"
-    local _http = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+    local _http = nil
+    if type(syn) == "table" and type(syn.request) == "function" then
+        _http = syn.request
+    elseif type(http) == "table" and type(http.request) == "function" then
+        _http = http.request
+    elseif type(http_request) == "function" then
+        _http = http_request
+    elseif type(request) == "function" then
+        _http = request
+    elseif type(fluxus) == "table" and type(fluxus.request) == "function" then
+        _http = fluxus.request
+    end
     
-    if _http then
+    if type(_http) == "function" then
         local _cleanMod = normalized:gsub("%.lua$", ""):gsub("%.txt$", "")
         local _targetUrl = _streamBase .. _cleanMod .. ".lua?session=" .. _sessionToken .. "&key=" .. _licenseKey
-        local _res = _http({
-            Url = _targetUrl,
-            Method = "GET",
-            Headers = { ["User-Agent"] = "Roblox/WinInet" }
-        })
+        local _res = nil
+        pcall(function()
+            _res = _http({
+                Url = _targetUrl,
+                Method = "GET",
+                Headers = { ["User-Agent"] = "Roblox/WinInet" }
+            })
+        end)
         local _statusCode = (_res and (_res.StatusCode or _res.Status or _res.status_code or _res.status)) or 0
         local _bodyStr = (_res and (_res.Body or _res.body)) or ""
         
         -- If .lua fails, try .txt
         if (_statusCode ~= 200 or _bodyStr:find("Error:")) and _cleanMod then
             local _altUrl = _streamBase .. _cleanMod .. ".txt?session=" .. _sessionToken .. "&key=" .. _licenseKey
-            local _resAlt = _http({ Url = _altUrl, Method = "GET", Headers = { ["User-Agent"] = "Roblox/WinInet" } })
-            if _resAlt and (_resAlt.StatusCode == 200 or _resAlt.Status == 200) and _resAlt.Body and not _resAlt.Body:find("Error:") then
-                _res = _resAlt
-                _statusCode = 200
-                _bodyStr = _resAlt.Body
-            end
+            pcall(function()
+                local _resAlt = _http({ Url = _altUrl, Method = "GET", Headers = { ["User-Agent"] = "Roblox/WinInet" } })
+                if _resAlt and (_resAlt.StatusCode == 200 or _resAlt.Status == 200) and _resAlt.Body and not _resAlt.Body:find("Error:") then
+                    _res = _resAlt
+                    _statusCode = 200
+                    _bodyStr = _resAlt.Body
+                end
+            end)
         end
 
         if _statusCode == 200 and _bodyStr ~= "" and not _bodyStr:find("Error:") then
-            local _fn, _err = loadstring(_bodyStr)
+            local _fn, _err = nil, nil
+            pcall(function()
+                if type(loadstring) == "function" then
+                    _fn, _err = loadstring(_bodyStr)
+                end
+            end)
             _bodyStr = nil
-            if _fn then
-                local _dynResult = _fn()
-                if _dynResult == nil then _dynResult = true end
-                __VFS_CACHE[normalized] = _dynResult
-                __VFS_CACHE[_cleanMod] = _dynResult
-                return _dynResult
+            if type(_fn) == "function" then
+                local _ok, _dynResult = pcall(_fn)
+                if _ok then
+                    if _dynResult == nil then _dynResult = true end
+                    __VFS_CACHE[normalized] = _dynResult
+                    __VFS_CACHE[_cleanMod] = _dynResult
+                    return _dynResult
+                end
             end
         end
     end`
@@ -183,8 +206,9 @@ ${streamingRequireLogic}
 end
 
 -- Inject __vfs_require into environment
-local env = getfenv and getfenv() or _G
-env.require = __vfs_require
+local env = (getfenv and getfenv()) or _G
+pcall(function() env.require = __vfs_require end)
+pcall(function() _G.require = __vfs_require end)
 local require = __vfs_require
 
 -- =======================================================

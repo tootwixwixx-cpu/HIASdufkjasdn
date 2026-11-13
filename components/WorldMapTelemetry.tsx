@@ -286,33 +286,33 @@ export default function WorldMapTelemetry({
   }, [regionZoom]);
 
   return (
-    <div className="bg-[#0D1017] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl relative">
+    <div className="bg-surface border border-line rounded-lg overflow-hidden relative">
       {/* Fitted Header Bar */}
-      <div className="p-4 sm:p-5 border-b border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0A0D14]">
+      <div className="p-4 sm:p-4 border-b border-line flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
-            <Globe className="w-5 h-5 animate-spin" style={{ animationDuration: "35s" }} />
+          <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-center text-accent-text shrink-0">
+            <Globe className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-bold text-white tracking-wide font-mono">
+              <h2 className="text-body-sm sm:text-base font-bold text-fg tracking-wide font-data">
                 Real-Time Global Player Telemetry
               </h2>
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-micro font-bold font-data bg-success/15 text-success-text border border-success/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
                 <span>{activeCount} ONLINE NOW</span>
               </span>
             </div>
-            <p className="text-xs text-zinc-400 font-mono mt-0.5">
+            <p className="text-caption text-fg-muted font-data mt-0.5">
               Live geographic execution radar tracking Roblox players across global continents & edge nodes.
             </p>
           </div>
         </div>
 
         {/* Region & Filter Controls */}
-        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto font-mono text-xs">
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto font-data text-caption">
           {/* Zoom Presets */}
-          <div className="flex items-center bg-[#080A0F] border border-zinc-800 rounded-xl p-0.5">
+          <div className="flex items-center bg-canvas border border-line rounded-lg p-0.5">
             {[
               { id: "global", label: "World" },
               { id: "na", label: "Americas" },
@@ -323,10 +323,10 @@ export default function WorldMapTelemetry({
                 key={reg.id}
                 type="button"
                 onClick={() => setRegionZoom(reg.id as any)}
-                className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                className={`px-2 py-1 rounded-lg text-micro font-medium transition-all ${
                   regionZoom === reg.id
-                    ? "bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30 shadow-sm"
-                    : "text-zinc-400 hover:text-white"
+                    ? "bg-accent/20 text-accent-text font-bold border border-accent/30"
+                    : "text-fg-muted hover:text-fg"
                 }`}
               >
                 {reg.label}
@@ -335,14 +335,14 @@ export default function WorldMapTelemetry({
           </div>
 
           {/* Active / All Toggle */}
-          <div className="flex items-center bg-[#080A0F] border border-zinc-800 rounded-xl p-0.5">
+          <div className="flex items-center bg-canvas border border-line rounded-lg p-0.5">
             <button
               type="button"
               onClick={() => setFilterMode("active")}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+              className={`px-2.5 py-1 rounded-lg text-micro font-semibold transition-all ${
                 filterMode === "active"
-                  ? "bg-cyan-500 text-black font-bold shadow-sm"
-                  : "text-zinc-400 hover:text-white"
+                  ? "bg-accent text-accent-fg font-bold"
+                  : "text-fg-muted hover:text-fg"
               }`}
             >
               Active ({activeCount})
@@ -350,10 +350,10 @@ export default function WorldMapTelemetry({
             <button
               type="button"
               onClick={() => setFilterMode("all")}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+              className={`px-2.5 py-1 rounded-lg text-micro font-semibold transition-all ${
                 filterMode === "all"
-                  ? "bg-zinc-800 text-white font-bold"
-                  : "text-zinc-400 hover:text-white"
+                  ? "bg-surface-hover text-fg font-bold"
+                  : "text-fg-muted hover:text-fg"
               }`}
             >
               All Runs
@@ -364,19 +364,19 @@ export default function WorldMapTelemetry({
 
       {/* Top Country Distribution Bar */}
       {countryStats.length > 0 && (
-        <div className="px-4 py-2.5 bg-[#080A0F] border-b border-zinc-800/80 flex items-center gap-2 overflow-x-auto text-xs font-mono scrollbar-none">
-          <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider flex items-center gap-1 shrink-0">
-            <Crosshair className="w-3 h-3 text-cyan-400" />
+        <div className="px-4 py-2.5 bg-canvas border-b border-line flex items-center gap-2 overflow-x-auto text-caption font-data scrollbar-none">
+          <span className="text-micro font-bold text-fg-subtle flex items-center gap-1 shrink-0">
+            <Crosshair className="w-3 h-3 text-accent-text" />
             Top Locations:
           </span>
           {countryStats.map((c) => (
             <div
               key={c.country}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0E121B] border border-zinc-800 text-zinc-300 shrink-0 text-[11px]"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface border border-line text-fg shrink-0 text-micro"
             >
               <span>{c.flag}</span>
-              <span className="font-semibold text-zinc-200">{c.country}</span>
-              <span className="text-cyan-400 font-bold bg-cyan-500/10 px-1.5 py-0.2 rounded text-[10px]">
+              <span className="font-semibold text-fg">{c.country}</span>
+              <span className="text-accent-text font-bold bg-accent/10 px-1.5 py-0.2 rounded text-micro">
                 {c.count}
               </span>
             </div>
@@ -565,31 +565,31 @@ export default function WorldMapTelemetry({
 
         {/* Selected Player Floating Glassmorphic Telemetry Card */}
         {selectedPlayer && (
-          <div className="absolute bottom-4 left-4 right-4 md:right-auto md:w-80 bg-[#0E121B]/95 border border-cyan-500/40 rounded-2xl p-4 shadow-2xl backdrop-blur-md animate-fadeIn z-30 font-mono text-xs">
-            <div className="flex items-start justify-between pb-2.5 border-b border-zinc-800">
+          <div className="absolute bottom-4 left-4 right-4 md:right-auto md:w-80 bg-surface border border-accent/40 rounded-lg p-4 animate-fadeIn z-30 font-data text-caption">
+            <div className="flex items-start justify-between pb-2.5 border-b border-line">
               <div className="flex items-center gap-2.5">
                 {selectedPlayer.userId ? (
                   <img
                     src={`/api/roblox/avatar?userId=${selectedPlayer.userId}`}
                     alt={selectedPlayer.username}
-                    className="w-9 h-9 rounded-xl border border-zinc-700 bg-zinc-900 object-cover"
+                    className="w-9 h-9 rounded-lg border border-line-strong bg-surface object-cover"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = "none";
                     }}
                   />
                 ) : (
-                  <div className="w-9 h-9 rounded-xl bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-400">
+                  <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-center font-bold text-accent-text">
                     {selectedPlayer.username.substring(0, 2).toUpperCase()}
                   </div>
                 )}
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white text-xs">{selectedPlayer.username}</span>
+                    <span className="font-bold text-fg text-caption">{selectedPlayer.username}</span>
                     {selectedPlayer.isOnline && (
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="w-2 h-2 rounded-full bg-success" />
                     )}
                   </div>
-                  <span className="text-[10px] text-zinc-400 block">
+                  <span className="text-micro text-fg-muted block">
                     ID: {selectedPlayer.userId || "Unknown"}
                   </span>
                 </div>
@@ -597,48 +597,48 @@ export default function WorldMapTelemetry({
               <button
                 type="button"
                 onClick={() => setSelectedPlayer(null)}
-                className="text-zinc-500 hover:text-white p-1 rounded"
+                className="text-fg-subtle hover:text-fg p-1 rounded"
               >
                 ✕
               </button>
             </div>
 
-            <div className="mt-2.5 space-y-1.5 text-[11px]">
-              <div className="flex items-center justify-between text-zinc-400">
+            <div className="mt-2.5 space-y-1.5 text-micro">
+              <div className="flex items-center justify-between text-fg-muted">
                 <span>Location:</span>
-                <span className="text-white font-medium flex items-center gap-1">
+                <span className="text-fg font-medium flex items-center gap-1">
                   <span>{selectedPlayer.flag}</span>
                   <span>{selectedPlayer.city}, {selectedPlayer.country}</span>
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-zinc-400">
+              <div className="flex items-center justify-between text-fg-muted">
                 <span>Game Name:</span>
-                <span className="text-cyan-300 font-medium truncate max-w-[170px]">
+                <span className="text-accent-text font-medium truncate max-w-[170px]">
                   {selectedPlayer.placeName}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-zinc-400">
+              <div className="flex items-center justify-between text-fg-muted">
                 <span>Executor:</span>
-                <span className="px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-300 border border-purple-500/30 font-bold text-[10px]">
+                <span className="px-1.5 py-0.2 rounded bg-accent/15 text-accent-text border border-accent/30 font-bold text-micro">
                   {selectedPlayer.executor}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-zinc-400">
+              <div className="flex items-center justify-between text-fg-muted">
                 <span>Device OS:</span>
-                <span className="text-zinc-300 font-medium">{selectedPlayer.os}</span>
+                <span className="text-fg font-medium">{selectedPlayer.os}</span>
               </div>
 
-              <div className="flex items-center justify-between text-zinc-400">
+              <div className="flex items-center justify-between text-fg-muted">
                 <span>Client IP:</span>
-                <span className="text-zinc-300 font-mono text-[10px]">{selectedPlayer.ip}</span>
+                <span className="text-fg font-data text-micro">{selectedPlayer.ip}</span>
               </div>
 
-              <div className="flex items-center justify-between text-zinc-400 pt-1 border-t border-zinc-800">
+              <div className="flex items-center justify-between text-fg-muted pt-1 border-t border-line">
                 <span>Session Duration:</span>
-                <span className="text-emerald-400 font-semibold">{selectedPlayer.duration}</span>
+                <span className="text-success-text font-semibold">{selectedPlayer.duration}</span>
               </div>
             </div>
           </div>
@@ -646,18 +646,18 @@ export default function WorldMapTelemetry({
       </div>
 
       {/* Footer Radar Legend & Telemetry Pulse */}
-      <div className="px-4 py-3 bg-[#0A0D14] border-t border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px] font-mono text-zinc-400">
+      <div className="px-4 py-3 bg-surface border-t border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-micro font-data text-fg-muted">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+            <span className="w-2 h-2 rounded-full bg-success" />
             <span>Active Session (Online)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/50" />
+            <span className="w-2 h-2 rounded-full bg-accent" />
             <span>Authenticated Execution</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-zinc-500">
+        <div className="flex items-center gap-2 text-fg-subtle">
           <span>Click any glowing ping point on the world map to inspect player telemetry</span>
         </div>
       </div>

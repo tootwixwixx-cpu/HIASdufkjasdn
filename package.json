@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:obfuscator": "node lib/obfuscator/tools/run-all.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.6",
@@ -14,7 +15,7 @@
     "clsx": "^2.1.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.453.0",
-    "next": "14.2.15",
+    "next": "^16.4.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4",

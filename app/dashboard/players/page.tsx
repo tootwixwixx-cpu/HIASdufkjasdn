@@ -32,7 +32,32 @@ import {
   Search,
   MessageSquare,
   Mail,
+  Ban,
 } from "lucide-react";
+import {
+  Badge,
+  StatusBadge,
+  Button,
+  Input,
+  Textarea,
+  Select,
+  Field,
+  Modal,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableEmpty,
+  TableToolbar,
+  Card,
+  CardHeader,
+  CardBody,
+} from "@/components/ui";
 import ChatroomManager from "@/components/ChatroomManager";
 import DmsManager from "@/components/DmsManager";
 
@@ -110,14 +135,14 @@ function RobloxAvatar({
 
   const sizeClass =
     size === "sm"
-      ? "w-7 h-7 rounded-lg text-[10px]"
+      ? "w-7 h-7 rounded-lg text-micro"
       : size === "lg"
-      ? "w-12 h-12 rounded-2xl text-sm"
-      : "w-10 h-10 rounded-xl text-xs";
+      ? "w-12 h-12 rounded-lg text-body-sm"
+      : "w-10 h-10 rounded-lg text-caption";
 
   if (userId && !imgError) {
     return (
-      <div className={`${sizeClass} overflow-hidden bg-[#181a24] border border-gray-700/60 shrink-0 relative shadow-inner flex items-center justify-center`}>
+      <div className={`${sizeClass} overflow-hidden bg-surface-hover border border-line-strong shrink-0 relative flex items-center justify-center`}>
         <img
           src={`/api/roblox/avatar?userId=${userId}`}
           alt={username || "Roblox Avatar"}
@@ -132,7 +157,7 @@ function RobloxAvatar({
 
   return (
     <div
-      className={`${sizeClass} bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-center font-bold text-blue-300 shrink-0 shadow-inner`}
+      className={`${sizeClass} border border-accent/30 flex items-center justify-center font-bold text-accent-text shrink-0`}
     >
       {initials}
     </div>
@@ -534,181 +559,105 @@ export default function PlayersPage() {
   const bannedCount = Object.keys(bannedIps).length;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Page Header & Live Telemetry Badge */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
-            <Users className="w-6 h-6 text-emerald-400" />
-            Players & Active Sessions
+    <div className="space-y-4">
+      {/* Page header */}
+      <div className="flex flex-col justify-between gap-3 border-b border-line pb-3 lg:flex-row lg:items-end">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-heading font-semibold text-fg">
+            Players & sessions
+            <Badge tone="success" dot mono>
+              {onlineCount} online
+            </Badge>
           </h1>
-          <p className="text-xs sm:text-sm text-gray-400 mt-0.5">
-            Real-time player monitoring. Inactive sessions disconnect after 15 seconds of silence and are automatically cleared.
+          <p className="mt-0.5 text-body-sm text-fg-muted">
+            Live player monitoring. Sessions disconnect after 15 seconds of silence and are cleared automatically.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setBanModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold shadow-sm transition-all"
-            title="Ban Any IP Address Immediately"
-          >
-            <ShieldBan className="w-3.5 h-3.5 text-rose-400" />
-            <span>Ban IP Address</span>
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => setBanModalOpen(true)} title="Ban any IP address immediately">
+            <ShieldBan />
+            Ban IP
+          </Button>
+          <Button size="sm" onClick={() => setAnnouncementModal(true)} title="Broadcast a live announcement to in-game sessions">
+            <Megaphone />
+            Broadcast
+          </Button>
 
-          <button
-            type="button"
-            onClick={() => setAnnouncementModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold shadow-sm transition-all"
-            title="Broadcast Live Announcement to In-Game Sessions"
-          >
-            <Megaphone className="w-3.5 h-3.5 text-amber-400" />
-            <span>Broadcast Announcement</span>
-          </button>
+          {/* Toggle view: cards vs table */}
+          <Tabs variant="segmented" value={viewMode} onValueChange={(v) => setViewMode(v as "cards" | "table")}>
+            <TabsList>
+              <TabsTrigger value="cards" title="Player cards view" aria-label="Cards view">
+                <LayoutGrid />
+              </TabsTrigger>
+              <TabsTrigger value="table" title="Table view" aria-label="Table view">
+                <List />
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Online Right Now: {onlineCount}</span>
-          </div>
-
-          {/* Toggle View: Cards vs Table */}
-          <div className="flex items-center bg-[#12141d] border border-gray-800 rounded-xl p-0.5">
-            <button
-              type="button"
-              onClick={() => setViewMode("cards")}
-              className={`p-1.5 rounded-lg text-xs transition-colors ${
-                viewMode === "cards" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
-              }`}
-              title="Player Cards View"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={`p-1.5 rounded-lg text-xs transition-colors ${
-                viewMode === "table" ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white"
-              }`}
-              title="Table View"
-            >
-              <List className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={fetchPlayers}
-            className="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-colors"
-            title="Refresh telemetry"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+          <Button size="sm" iconOnly onClick={fetchPlayers} title="Refresh telemetry" aria-label="Refresh telemetry">
+            <RefreshCw />
+          </Button>
         </div>
       </div>
 
       {actionSuccess && (
-        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
-          <Check className="w-4 h-4" />
+        <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-body-sm text-success-text">
+          <Check className="size-4" />
           <span>{actionSuccess}</span>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-800 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab("sessions")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-            activeTab === "sessions"
-              ? "bg-emerald-600 text-white shadow-sm"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/60"
-          }`}
-        >
-          <span>Active Players ({onlineCount})</span>
-          {staffActive.length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-purple-500 text-white font-bold animate-pulse">
-              {staffActive.length} Staff
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("announcements")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-            activeTab === "announcements"
-              ? "bg-amber-600 text-white shadow-sm"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/60"
-          }`}
-        >
-          <Megaphone className="w-3.5 h-3.5" />
-          <span>In-Game Announcements ({announcements.length})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("staff")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-            activeTab === "staff"
-              ? "bg-purple-600 text-white shadow-sm"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/60"
-          }`}
-        >
-          <Shield className="w-3.5 h-3.5" />
-          <span>Staff History ({staffHistory.length})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("chatroom")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-            activeTab === "chatroom"
-              ? "bg-purple-600 text-white shadow-sm"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/60"
-          }`}
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-          <span>Chatroom</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("dms")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-            activeTab === "dms"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/60"
-          }`}
-        >
-          <Mail className="w-3.5 h-3.5" />
-          <span>DMs / Contact Dev</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("bans")}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-            activeTab === "bans"
-              ? "bg-rose-600 text-white shadow-sm"
-              : "text-gray-400 hover:text-white hover:bg-gray-800/60"
-          }`}
-        >
-          Banned IPs ({bannedCount})
-        </button>
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <TabsList className="overflow-x-auto">
+          <TabsTrigger value="sessions" count={onlineCount}>
+            Active players
+            {staffActive.length > 0 && (
+              <Badge tone="accent" className="h-4 px-1">
+                {staffActive.length} staff
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="announcements" count={announcements.length}>
+            <Megaphone />
+            Announcements
+          </TabsTrigger>
+          <TabsTrigger value="staff" count={staffHistory.length}>
+            <Shield />
+            Staff history
+          </TabsTrigger>
+          <TabsTrigger value="chatroom">
+            <MessageSquare />
+            Chatroom
+          </TabsTrigger>
+          <TabsTrigger value="dms">
+            <Mail />
+            DMs
+          </TabsTrigger>
+          <TabsTrigger value="bans" count={bannedCount}>
+            <Ban />
+            Banned IPs
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* SESSIONS TAB */}
       {activeTab === "sessions" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Active Staff Reviews (Zero Logging / Protected) */}
           {staffActive.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
-                  <h2 className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-purple-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-accent" />
+                  <h2 className="text-caption font-bold text-accent-text flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-accent-text" />
                     Staff Review Active ({staffActive.length})
                   </h2>
                 </div>
-                <span className="text-[10px] text-purple-400/80 font-mono">
+                <span className="text-micro text-accent-text font-data">
                   Anonymous Session • Zero Telemetry Stored
                 </span>
               </div>
@@ -721,67 +670,66 @@ export default function PlayersPage() {
                   return (
                     <div
                       key={staff.id}
-                      className="bg-gradient-to-br from-purple-950/40 via-[#0f1118] to-purple-950/20 border-2 border-purple-500/50 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-2xl shadow-purple-950/50"
+                      className="border border-accent/30 bg-surface-raised rounded-lg p-4 flex flex-col justify-between relative overflow-hidden"
                     >
                       {/* Top Ambient Accent */}
-                      <div className="absolute -top-10 -right-10 w-24 h-24 bg-purple-600/20 blur-xl rounded-full pointer-events-none" />
 
                       <div>
                         {/* Header: Title and Status Badge */}
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shrink-0 shadow-inner">
-                              <Shield className="w-5 h-5 animate-pulse" />
+                            <div className="w-10 h-10 rounded-lg bg-accent/20 border border-accent/40 flex items-center justify-center text-accent-text shrink-0">
+                              <Shield className="w-5 h-5" />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
-                                <h3 className="text-sm font-bold text-white">Staff Reviewing</h3>
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-500/30 text-purple-200 border border-purple-500/40 uppercase">
+                                <h3 className="text-body-sm font-bold text-fg">Staff Reviewing</h3>
+                                <span className="px-1.5 py-0.5 rounded text-micro font-data font-bold bg-accent/30 text-accent-text border border-accent/40">
                                   STAFF
                                 </span>
                               </div>
-                              <span className="text-[11px] text-purple-300/80 block mt-0.5">
+                              <span className="text-micro text-accent-text block mt-0.5">
                                 Official Script Review
                               </span>
                             </div>
                           </div>
 
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm shrink-0">
-                            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping"></span>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-micro font-semibold bg-accent/20 text-accent-text border border-accent/40 shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-accent"></span>
                             Reviewing
                           </span>
                         </div>
 
                         {/* Review Duration & Script Info */}
-                        <div className="mt-4 p-3.5 rounded-xl bg-purple-900/10 border border-purple-500/20 space-y-2.5">
+                        <div className="mt-4 p-3.5 rounded-lg bg-accent/10 border border-accent/20 space-y-2.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-purple-400" />
+                            <span className="text-micro text-fg-muted font-semibold flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-accent-text" />
                               Review Duration
                             </span>
-                            <span className="text-sm font-mono font-bold text-purple-200 animate-pulse">
+                            <span className="text-body-sm font-data font-bold text-accent-text">
                               {formatDuration(liveDuration)}
                             </span>
                           </div>
 
-                          <div className="flex items-center justify-between pt-2 border-t border-purple-500/15 text-xs">
-                            <span className="text-[10px] text-gray-400 font-medium">Target Script:</span>
-                            <span className="font-semibold text-white truncate max-w-[170px]" title={staff.script_name}>
+                          <div className="flex items-center justify-between pt-2 border-t border-accent/15 text-caption">
+                            <span className="text-micro text-fg-muted font-medium">Target Script:</span>
+                            <span className="font-semibold text-fg truncate max-w-[170px]" title={staff.script_name}>
                               {staff.script_name || "All Scripts"}
                             </span>
                           </div>
 
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-[10px] text-gray-400 font-medium">Started At:</span>
-                            <span className="font-mono text-[11px] text-gray-300">
+                          <div className="flex items-center justify-between text-caption">
+                            <span className="text-micro text-fg-muted font-medium">Started At:</span>
+                            <span className="font-data text-micro text-fg">
                               {new Date(staff.review_started).toLocaleTimeString()}
                             </span>
                           </div>
                         </div>
 
                         {/* Anonymity / Zero-Logging Guarantee Notice */}
-                        <div className="mt-3 p-2.5 rounded-xl bg-black/40 border border-purple-500/20 text-[10px] text-purple-200/90 flex items-center gap-2">
-                          <EyeOff className="w-4 h-4 text-purple-400 shrink-0" />
+                        <div className="mt-3 p-2.5 rounded-lg bg-canvas/40 border border-accent/20 text-micro text-accent-text flex items-center gap-2">
+                          <EyeOff className="w-4 h-4 text-accent-text shrink-0" />
                           <span>
                             Zero logs stored. Reviewer identity, IP, and HWID are fully protected and untracked.
                           </span>
@@ -796,17 +744,17 @@ export default function PlayersPage() {
 
           {/* ALT / MULTI-ACCOUNT FARMING DETECTOR BANNER */}
           {farmingClusters.length > 0 && (
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-[#16120e] to-amber-950/20 border-2 border-amber-500/50 shadow-2xl space-y-3">
+            <div className="p-4 rounded-lg border border-warning/40 bg-warning/[0.04] space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                    <AlertTriangle className="w-4 h-4 animate-pulse" />
+                  <div className="w-8 h-8 rounded-lg bg-warning/20 border border-warning/40 flex items-center justify-center text-warning-text shrink-0">
+                    <AlertTriangle className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-2">
+                    <h3 className="text-caption font-bold text-warning-text flex items-center gap-2">
                       Multi-Account Farming Detected ({farmingClusters.length} {farmingClusters.length === 1 ? "Cluster" : "Clusters"})
                     </h3>
-                    <p className="text-[11px] text-amber-200/70">
+                    <p className="text-micro text-warning-text">
                       Concurrent Roblox accounts detected operating from identical network IP addresses or hardware identifiers.
                     </p>
                   </div>
@@ -817,17 +765,17 @@ export default function PlayersPage() {
                 {farmingClusters.map((cluster) => (
                   <div
                     key={cluster.id}
-                    className="p-3 rounded-xl bg-[#0e1017]/80 border border-amber-500/30 flex flex-col justify-between gap-3 text-xs"
+                    className="p-3 rounded-lg bg-surface border border-warning/30 flex flex-col justify-between gap-3 text-caption"
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-gray-300 font-semibold flex items-center gap-1.5">
-                          <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 font-bold">
+                        <span className="font-data text-fg font-semibold flex items-center gap-1.5">
+                          <span className="text-micro px-1.5 py-0.5 rounded bg-surface-hover text-fg-muted font-bold">
                             {cluster.type.toUpperCase()}
                           </span>
                           {cluster.identifier}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        <span className="px-2 py-0.5 rounded-full text-micro font-bold bg-warning/20 text-warning-text border border-warning/40">
                           {cluster.count} Linked Accounts
                         </span>
                       </div>
@@ -836,20 +784,20 @@ export default function PlayersPage() {
                         {cluster.accounts.map((acc, i) => (
                           <div
                             key={i}
-                            className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gray-900 border border-gray-800 text-[11px] text-gray-200"
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface border border-line text-micro text-fg"
                           >
                             <RobloxAvatar userId={acc.user_id} username={acc.username} size="sm" />
-                            <span className="font-medium text-white">{acc.username}</span>
+                            <span className="font-medium text-fg">{acc.username}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-2 border-t border-gray-800/80">
+                    <div className="flex items-center gap-2 pt-2 border-t border-line">
                       <button
                         type="button"
                         onClick={() => handleKickFarm(cluster)}
-                        className="flex-1 py-1 px-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
+                        className="flex-1 py-1 px-2 rounded-lg bg-warning/15 hover:bg-warning/30 text-warning-text border border-warning/30 text-micro font-semibold transition-colors flex items-center justify-center gap-1"
                         title="Kick all accounts in this cluster immediately"
                       >
                         <ShieldAlert className="w-3 h-3" />
@@ -860,7 +808,7 @@ export default function PlayersPage() {
                         <button
                           type="button"
                           onClick={() => handleBanFarm(cluster)}
-                          className="py-1 px-2.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
+                          className="py-1 px-2.5 rounded-lg bg-danger/15 hover:bg-danger/30 text-danger-text border border-danger/30 text-micro font-semibold transition-colors flex items-center justify-center gap-1"
                           title="Ban this IP and terminate all concurrent alt sessions"
                         >
                           <ShieldBan className="w-3 h-3" />
@@ -875,15 +823,15 @@ export default function PlayersPage() {
           )}
 
           {loading ? (
-            <div className="text-center py-12 text-xs text-gray-500 bg-[#12141d] rounded-2xl border border-gray-800">
+            <div className="text-center py-12 text-caption text-fg-subtle bg-surface-raised rounded-lg border border-line">
               Loading player telemetry...
             </div>
           ) : processedSessions.length === 0 ? (
             staffActive.length === 0 && (
-              <div className="text-center py-16 bg-[#12141d] border border-gray-800/80 rounded-2xl p-6">
-                <Users className="w-10 h-10 text-gray-600 mx-auto mb-3" />
-                <p className="text-sm text-gray-300 font-semibold">No active players right now</p>
-                <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+              <div className="text-center py-16 bg-surface-raised border border-line rounded-lg p-4">
+                <Users className="w-10 h-10 text-fg-disabled mx-auto mb-3" />
+                <p className="text-body-sm text-fg font-semibold">No active players right now</p>
+                <p className="text-caption text-fg-subtle mt-1 max-w-md mx-auto">
                   Players currently executing your script in Roblox will show up here live with real-time ping telemetry.
                 </p>
               </div>
@@ -900,10 +848,10 @@ export default function PlayersPage() {
                 return (
                 <div
                   key={cardKey}
-                  className={`bg-[#0f1118] border rounded-2xl p-4 flex flex-col justify-between transition-all duration-300 relative overflow-hidden shadow-xl ${
+                  className={`bg-surface border rounded-lg p-4 flex flex-col justify-between transition-all duration-300 relative overflow-hidden ${
                     s.is_farming
-                      ? "border-amber-500/40 hover:border-amber-500/60 shadow-amber-500/5"
-                      : "border-emerald-500/30 hover:border-emerald-500/50 shadow-emerald-500/5"
+                      ? "border-warning/40 hover:border-warning/60"
+                      : "border-success/30 hover:border-success/50"
                   }`}
                 >
                   {/* Card Header: Avatar, Name, Status */}
@@ -914,21 +862,21 @@ export default function PlayersPage() {
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="text-sm font-bold text-white truncate">
+                          <h3 className="text-body-sm font-bold text-fg truncate">
                             {s.roblox_username || "Executor User"}
                           </h3>
                           {s.is_farming && (
                             <span
-                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-tight flex items-center gap-1"
+                              className="px-1.5 py-0.5 rounded text-micro font-bold bg-warning/20 text-warning-text border border-warning/40 tracking-tight flex items-center gap-1"
                               title={`Alt Farming Cluster: Running alongside ${s.farm_accounts?.join(", ")}`}
                             >
-                              <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                              <AlertTriangle className="w-2.5 h-2.5 text-warning-text" />
                               FARM: {s.farming_count}x
                             </span>
                           )}
                         </div>
                         {s.roblox_user_id && (
-                          <span className="text-[10px] font-mono text-gray-500 block truncate">
+                          <span className="text-micro font-data text-fg-subtle block truncate">
                             UID: {s.roblox_user_id}
                           </span>
                         )}
@@ -937,8 +885,8 @@ export default function PlayersPage() {
 
                     {/* Status Pill */}
                     <div className="shrink-0 flex items-center gap-1.5">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-micro font-semibold bg-success/10 text-success-text border border-success/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
                         Active
                       </span>
                     </div>
@@ -946,12 +894,12 @@ export default function PlayersPage() {
 
                   {/* Disconnected Notice Banner on Card */}
                   {!s.is_online && (
-                    <div className="mt-3 p-2 rounded-xl bg-rose-500/10 border border-rose-500/25 text-[11px] text-rose-300 flex items-center justify-between">
+                    <div className="mt-3 p-2 rounded-lg bg-danger/10 border border-danger/25 text-micro text-danger-text flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-danger"></span>
                         Session ended.
                       </span>
-                      <span className="text-[10px] text-gray-400 font-mono">
+                      <span className="text-micro text-fg-muted font-data">
                         Clearing in {s.removal_countdown_sec}s
                       </span>
                     </div>
@@ -959,42 +907,42 @@ export default function PlayersPage() {
 
                   {/* Alt Farming Cluster Notice on Card */}
                   {s.is_farming && s.farm_accounts && s.farm_accounts.length > 0 && (
-                    <div className="mt-2.5 p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-300">
+                    <div className="mt-2.5 p-2 rounded-lg bg-warning/10 border border-warning/25 text-micro text-warning-text">
                       <div className="flex items-center justify-between font-semibold">
                         <span className="flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 text-amber-400" />
+                          <AlertTriangle className="w-3 h-3 text-warning-text" />
                           Multi-Account Farm
                         </span>
-                        <span className="text-[10px] font-mono bg-amber-500/20 px-1.5 py-0.5 rounded text-amber-200">
+                        <span className="text-micro font-data bg-warning/20 px-1.5 py-0.5 rounded text-warning-text">
                           {s.farming_count} Alts Active
                         </span>
                       </div>
-                      <p className="text-[10px] text-amber-200/70 mt-1 truncate">
+                      <p className="text-micro text-warning-text mt-1 truncate">
                         Linked Alts: {s.farm_accounts.join(", ")}
                       </p>
                     </div>
                   )}
 
                   {/* Stats Grid */}
-                  <div className="grid grid-cols-2 gap-2 mt-4 py-3 border-y border-gray-800/60 text-xs">
+                  <div className="grid grid-cols-2 gap-2 mt-4 py-3 border-y border-line-subtle text-caption">
                     <div>
-                      <span className="text-[10px] text-gray-500 uppercase tracking-wider block font-semibold">
+                      <span className="text-micro text-fg-subtle block font-semibold">
                         Playtime (Frozen on Quit)
                       </span>
-                      <div className="flex items-center gap-1.5 font-mono text-gray-200 mt-0.5">
-                        <Clock className="w-3.5 h-3.5 text-blue-400" />
+                      <div className="flex items-center gap-1.5 font-data text-fg mt-0.5">
+                        <Clock className="w-3.5 h-3.5 text-accent-text" />
                         <span className="font-semibold">{formatDuration(s.duration_seconds)}</span>
                       </div>
                     </div>
 
                     <div>
-                      <span className="text-[10px] text-gray-500 uppercase tracking-wider block font-semibold">
+                      <span className="text-micro text-fg-subtle block font-semibold">
                         Heartbeat Telemetry
                       </span>
-                      <div className="flex items-center gap-1.5 font-mono text-gray-200 mt-0.5">
+                      <div className="flex items-center gap-1.5 font-data text-fg mt-0.5">
                         <Activity
                           className={`w-3.5 h-3.5 ${
-                            s.is_online ? "text-emerald-400" : "text-gray-500"
+                            s.is_online ? "text-success-text" : "text-fg-subtle"
                           }`}
                         />
                         <span>{s.is_online ? `${s.ping_sec}s ago` : "Lost connection"}</span>
@@ -1003,39 +951,39 @@ export default function PlayersPage() {
                   </div>
 
                   {/* Device, Network & Game Details */}
-                  <div className="mt-3 space-y-1 text-[11px] text-gray-400">
+                  <div className="mt-3 space-y-1 text-micro text-fg-muted">
                     {s.place_id && (
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-500 flex items-center gap-1">
-                          <Gamepad2 className="w-3 h-3 text-purple-400" />
+                        <span className="text-fg-subtle flex items-center gap-1">
+                          <Gamepad2 className="w-3 h-3 text-accent-text" />
                           Game:
                         </span>
-                        <span className="font-mono text-purple-300 font-semibold truncate max-w-[160px]" title={s.place_name || String(s.place_id)}>
+                        <span className="font-data text-accent-text font-semibold truncate max-w-[160px]" title={s.place_name || String(s.place_id)}>
                           {s.place_name || `Place #${s.place_id}`}
                         </span>
                       </div>
                     )}
 
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-500">IP:</span>
-                      <span className="font-mono text-gray-300">
+                      <span className="text-fg-subtle">IP:</span>
+                      <span className="font-data text-fg">
                         {s.ip_address}
                         {s.is_banned && (
-                          <span className="text-rose-400 font-bold ml-1">[BANNED]</span>
+                          <span className="text-danger-text font-bold ml-1">[BANNED]</span>
                         )}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between truncate">
-                      <span className="text-gray-500">HWID:</span>
-                      <span className="font-mono text-gray-400 truncate max-w-[150px]">
+                      <span className="text-fg-subtle">HWID:</span>
+                      <span className="font-data text-fg-muted truncate max-w-[150px]">
                         {s.hwid || "N/A"}
                       </span>
                     </div>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="grid grid-cols-4 gap-1.5 mt-4 pt-3 border-t border-gray-800/60">
+                  <div className="grid grid-cols-4 gap-1.5 mt-4 pt-3 border-t border-line-subtle">
                     <button
                       type="button"
                       onClick={() =>
@@ -1044,7 +992,7 @@ export default function PlayersPage() {
                           username: s.roblox_username || s.ip_address,
                         })
                       }
-                      className="py-1.5 px-2 rounded-lg bg-blue-600/15 hover:bg-blue-600/30 text-blue-400 border border-blue-500/25 text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
+                      className="py-1.5 px-2 rounded-lg bg-accent/15 hover:bg-accent/30 text-accent-text border border-accent/25 text-micro font-semibold transition-colors flex items-center justify-center gap-1"
                       title="Send In-Game Message"
                     >
                       <Send className="w-3 h-3" />
@@ -1059,7 +1007,7 @@ export default function PlayersPage() {
                           username: s.roblox_username || s.ip_address,
                         })
                       }
-                      className="py-1.5 px-2 rounded-lg bg-emerald-600/15 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/25 text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
+                      className="py-1.5 px-2 rounded-lg bg-success/15 hover:bg-success/30 text-success-text border border-success/25 text-micro font-semibold transition-colors flex items-center justify-center gap-1"
                       title="Inject Luau Code into session"
                     >
                       <Code2 className="w-3 h-3" />
@@ -1075,7 +1023,7 @@ export default function PlayersPage() {
                           placeId: s.place_id || undefined,
                         })
                       }
-                      className="py-1.5 px-2 rounded-lg bg-purple-600/15 hover:bg-purple-600/30 text-purple-400 border border-purple-500/25 text-[11px] font-semibold transition-colors flex items-center justify-center gap-1"
+                      className="py-1.5 px-2 rounded-lg bg-accent/15 hover:bg-accent/30 text-accent-text border border-accent/25 text-micro font-semibold transition-colors flex items-center justify-center gap-1"
                       title="Server Hop or Teleport Place"
                     >
                       <Compass className="w-3 h-3" />
@@ -1085,7 +1033,7 @@ export default function PlayersPage() {
                     <button
                       type="button"
                       onClick={() => handleKick(s.id)}
-                      className="py-1.5 px-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/25 text-[11px] font-semibold transition-colors flex items-center justify-center"
+                      className="py-1.5 px-2 rounded-lg bg-warning/15 hover:bg-warning/30 text-warning-text border border-warning/25 text-micro font-semibold transition-colors flex items-center justify-center"
                       title="Remote kick"
                     >
                       Kick
@@ -1097,108 +1045,92 @@ export default function PlayersPage() {
             </div>
           ) : (
             /* TABLE LIST VIEW */
-            <div className="bg-[#12141d] border border-gray-800 rounded-xl overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0b0d14] border-b border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[10px]">
-                    <tr>
-                      <th className="p-3.5">Status</th>
-                      <th className="p-3.5">Roblox Player</th>
-                      <th className="p-3.5">IP Address</th>
-                      <th className="p-3.5">HWID / Device</th>
-                      <th className="p-3.5">Duration</th>
-                      <th className="p-3.5">Last Heartbeat</th>
-                      <th className="p-3.5 text-right">Remote Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800/60">
-                    {processedSessions.map((s) => {
-                      const rowKey = s.roblox_user_id && s.roblox_user_id !== "0"
-                        ? `row_uid_${s.roblox_user_id}`
-                        : s.roblox_username && s.roblox_username !== "Player"
-                        ? `row_user_${s.roblox_username}`
-                        : `row_id_${s.id}`;
-                      return (
-                      <tr
-                        key={rowKey}
-                        className="transition-colors hover:bg-gray-800/30"
-                      >
-                        <td className="p-3.5">
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                            Active
-                          </span>
-                        </td>
-                        <td className="p-3.5 font-medium text-white">
-                          <div className="flex items-center gap-2.5">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Roblox player</TableHead>
+                  <TableHead>IP address</TableHead>
+                  <TableHead>HWID</TableHead>
+                  <TableHead align="right">Session</TableHead>
+                  <TableHead align="right">Heartbeat</TableHead>
+                  <TableHead align="right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {processedSessions.length === 0 ? (
+                  <TableEmpty colSpan={7} title="No players online" description="Sessions appear here as soon as a loader sends its first heartbeat." />
+                ) : (
+                  processedSessions.map((s) => {
+                    const rowKey = s.roblox_user_id && s.roblox_user_id !== "0"
+                      ? `row_uid_${s.roblox_user_id}`
+                      : s.roblox_username && s.roblox_username !== "Player"
+                      ? `row_user_${s.roblox_username}`
+                      : `row_id_${s.id}`;
+                    return (
+                      <TableRow key={rowKey}>
+                        <TableCell>
+                          <StatusBadge status="online" />
+                        </TableCell>
+                        <TableCell className="py-1">
+                          <div className="flex items-center gap-2">
                             <RobloxAvatar userId={s.roblox_user_id} username={s.roblox_username} size="sm" />
-                            <div>
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span>{s.roblox_username || "Executor User"}</span>
-                                {s.is_farming && (
-                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                    FARM: {s.farming_count}x
-                                  </span>
-                                )}
-                              </div>
-                              {s.roblox_user_id && (
-                                <span className="block text-[10px] text-gray-500 font-mono">
-                                  ID: {s.roblox_user_id}
-                                </span>
-                              )}
-                            </div>
+                            <span className="font-medium text-fg">{s.roblox_username || "Executor user"}</span>
+                            {s.roblox_user_id && (
+                              <span className="font-data text-micro text-fg-subtle">{s.roblox_user_id}</span>
+                            )}
+                            {s.is_farming && (
+                              <Badge tone="warning" mono>
+                                farm {s.farming_count}x
+                              </Badge>
+                            )}
                           </div>
-                        </td>
-                        <td className="p-3.5 font-mono text-gray-300">
-                          {s.ip_address}
-                          {s.is_banned && (
-                            <span className="block text-[10px] text-rose-400 font-sans font-bold">
-                              [IP BANNED]
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3.5 font-mono text-[11px] text-gray-400 truncate max-w-[120px]">
-                          {s.hwid || "N/A"}
-                        </td>
-                        <td className="p-3.5 font-mono text-gray-300">
+                        </TableCell>
+                        <TableCell mono>
+                          <span className={s.is_banned ? "text-danger-text line-through" : ""}>{s.ip_address}</span>
+                          {s.is_banned && <StatusBadge status="banned" dot={false} className="ml-1.5" />}
+                        </TableCell>
+                        <TableCell mono muted truncate={140} title={s.hwid || undefined}>
+                          {s.hwid || "-"}
+                        </TableCell>
+                        <TableCell mono align="right">
                           {formatDuration(s.duration_seconds)}
-                          {!s.is_online && (
-                            <span className="text-[10px] text-gray-500 block">(Frozen)</span>
-                          )}
-                        </td>
-                        <td className="p-3.5 font-mono text-[11px] text-gray-400">
+                          {!s.is_online && <span className="ml-1 text-fg-subtle">(frozen)</span>}
+                        </TableCell>
+                        <TableCell mono muted align="right">
                           {s.is_online ? `${s.ping_sec}s ago` : "Offline"}
-                        </td>
-                        <td className="p-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
+                        </TableCell>
+                        <TableCell align="right">
+                          <div className="flex items-center justify-end gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="xs"
                               onClick={() =>
                                 setMessageModal({
                                   sessionId: s.id,
                                   username: s.roblox_username || s.ip_address,
                                 })
                               }
-                              className="px-2 py-1 rounded bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 text-[11px] font-medium transition-colors"
-                              title="Send Message"
+                              title="Send message"
                             >
                               Message
-                            </button>
-                            <button
-                              type="button"
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="xs"
                               onClick={() =>
                                 setCodeModal({
                                   sessionId: s.id,
                                   username: s.roblox_username || s.ip_address,
                                 })
                               }
-                              className="px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-[11px] font-medium transition-colors"
-                              title="Inject Luau Code"
+                              title="Run Luau code"
                             >
                               Code
-                            </button>
-                            <button
-                              type="button"
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="xs"
                               onClick={() =>
                                 setTeleportModal({
                                   sessionId: s.id,
@@ -1206,393 +1138,312 @@ export default function PlayersPage() {
                                   placeId: s.place_id || undefined,
                                 })
                               }
-                              className="px-2 py-1 rounded bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-500/30 text-[11px] font-medium transition-colors"
-                              title="Server Hop / Teleport"
+                              title="Server hop / teleport"
                             >
                               Hop
-                            </button>
+                            </Button>
                             {s.is_farming && (
-                              <button
-                                type="button"
+                              <Button
+                                variant="ghost"
+                                size="xs"
                                 onClick={() => {
                                   const cl = farmingClusters.find((c) => c.identifier === s.ip_address || (s.hwid && c.identifier === s.hwid));
                                   if (cl) handleKickFarm(cl);
                                   else handleKick(s.id);
                                 }}
-                                className="px-2 py-1 rounded bg-amber-500/25 hover:bg-amber-500/45 text-amber-300 border border-amber-500/40 text-[11px] font-bold transition-colors"
+                                className="text-warning-text hover:bg-warning/10 hover:text-warning-text"
                                 title="Kick all alts in this farm cluster"
                               >
-                                Kick Farm
-                              </button>
+                                Kick farm
+                              </Button>
                             )}
-                            <button
-                              type="button"
+                            <Button
+                              variant="ghost"
+                              size="xs"
                               onClick={() => handleKick(s.id)}
-                              className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/30 text-[11px] font-medium transition-colors"
-                              title="Remote Kick"
+                              className="hover:bg-warning/10 hover:text-warning-text"
+                              title="Kick player"
                             >
                               Kick
-                            </button>
-                            <button
-                              type="button"
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="xs"
                               onClick={() => handleBanIp(s.ip_address)}
-                              className="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 border border-rose-500/30 text-[11px] font-medium transition-colors"
-                              title="Ban IP Address"
+                              className="hover:bg-danger/10 hover:text-danger-text"
+                              title="Ban IP address"
                             >
                               Ban IP
-                            </button>
+                            </Button>
                             {!s.is_online && (
-                              <button
-                                type="button"
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                iconOnly
                                 onClick={() => handleRemoveCard(s.id)}
-                                className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
-                                title="Dismiss Card"
+                                title="Dismiss"
+                                aria-label="Dismiss"
                               >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
+                                <X />
+                              </Button>
                             )}
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
-                  })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  })
+                )}
+              </TableBody>
+            </Table>
           )}
         </div>
       )}
 
       {/* STAFF HISTORY TAB */}
       {activeTab === "staff" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#12141d] border border-gray-800 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                <Shield className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  Staff Review History
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                    {staffHistory.length} Total
-                  </span>
-                </h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Complete audit log of past and ongoing staff script reviews and durations. All reviewer details are completely unlogged.
-                </p>
-              </div>
-            </div>
-          </div>
+        <div className="space-y-2">
+          <p className="text-body-sm text-fg-muted">
+            Audit log of past and ongoing staff reviews and how long they ran. Reviewer details are never logged.
+          </p>
 
-          <div className="bg-[#12141d] border border-gray-800 rounded-xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#0b0d14] border-b border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5">Target Script</th>
-                    <th className="p-3.5">Review Key Label</th>
-                    <th className="p-3.5">Review Started</th>
-                    <th className="p-3.5">Review Duration</th>
-                    <th className="p-3.5 text-right">Logging Policy</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800/60">
-                  {staffHistory.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="text-center py-12 text-gray-500">
-                        <Shield className="w-8 h-8 text-gray-600 mx-auto mb-2 opacity-60" />
-                        <p className="text-sm text-gray-300 font-semibold">No staff reviews logged yet</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          When staff execute your script using a Staff Review Key, review durations will record here automatically.
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    staffHistory.map((item) => {
-                      const isCurrentlyActive = staffActive.some((a) => a.id === item.id);
-                      const startTime = new Date(item.review_started).getTime();
-                      const liveDurationSec = isCurrentlyActive
-                        ? Math.max(0, Math.floor((now - startTime) / 1000))
-                        : item.duration_seconds;
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Script</TableHead>
+                <TableHead>Script ID</TableHead>
+                <TableHead>Key label</TableHead>
+                <TableHead>Started</TableHead>
+                <TableHead align="right">Duration</TableHead>
+                <TableHead align="right">Logging</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {staffHistory.length === 0 ? (
+                <TableEmpty
+                  colSpan={7}
+                  title="No staff reviews yet"
+                  description="When staff run your script with a staff review key, the review shows up here."
+                />
+              ) : (
+                staffHistory.map((item) => {
+                  const isCurrentlyActive = staffActive.some((a) => a.id === item.id);
+                  const startTime = new Date(item.review_started).getTime();
+                  const liveDurationSec = isCurrentlyActive
+                    ? Math.max(0, Math.floor((now - startTime) / 1000))
+                    : item.duration_seconds;
 
-                      return (
-                        <tr key={item.id} className="hover:bg-gray-800/30 transition-colors">
-                          <td className="p-3.5">
-                            {isCurrentlyActive ? (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping"></span>
-                                Active Reviewing
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-gray-800 text-gray-300 border border-gray-700">
-                                <Check className="w-3 h-3 text-emerald-400" />
-                                Review Completed
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-3.5">
-                            <span className="font-semibold text-white">
-                              {item.script_name || "All Scripts"}
-                            </span>
-                            <span className="text-[10px] font-mono text-gray-500 block">
-                              ID: {item.script_id}
-                            </span>
-                          </td>
-                          <td className="p-3.5">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-300 border border-purple-500/30">
-                              {item.key_label || "Staff Review Key"}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-gray-300 font-mono text-[11px]">
-                            <div>{new Date(item.review_started).toLocaleDateString()}</div>
-                            <div className="text-[10px] text-gray-500">
-                              {new Date(item.review_started).toLocaleTimeString()}
-                            </div>
-                          </td>
-                          <td className="p-3.5">
-                            <span className="font-mono font-bold text-white bg-gray-800/80 px-2 py-1 rounded border border-gray-700/80">
-                              {formatDuration(liveDurationSec)}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-right">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              <EyeOff className="w-3 h-3" />
-                              Zero Data Stored
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        {isCurrentlyActive ? (
+                          <Badge tone="accent" dot>
+                            Reviewing
+                          </Badge>
+                        ) : (
+                          <Badge>Completed</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{item.script_name || "All scripts"}</TableCell>
+                      <TableCell mono muted truncate={160}>
+                        {item.script_id}
+                      </TableCell>
+                      <TableCell mono>{item.key_label || "Staff review key"}</TableCell>
+                      <TableCell mono muted>
+                        {new Date(item.review_started).toLocaleDateString()} {new Date(item.review_started).toLocaleTimeString()}
+                      </TableCell>
+                      <TableCell mono align="right" className="text-fg">
+                        {formatDuration(liveDurationSec)}
+                      </TableCell>
+                      <TableCell align="right">
+                        <span className="inline-flex items-center gap-1 text-caption text-fg-muted">
+                          <EyeOff className="size-3" />
+                          Nothing stored
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
 
       {/* BANNED IPS TAB */}
       {activeTab === "bans" && (
         <div className="space-y-4">
-          {/* Quick Manual Ban Form */}
-          <div className="p-4 bg-[#12141d] border border-gray-800 rounded-2xl shadow-xl space-y-3">
-            <div className="flex items-center justify-between border-b border-gray-800/80 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                  <ShieldBan className="w-4 h-4" />
+          {/* Quick manual ban */}
+          <Card>
+            <CardHeader
+              divided
+              title="Ban an IP"
+              description="Blocks the IP from claiming keys, running loaders and verifying sessions, effective immediately."
+            />
+            <CardBody>
+              <form onSubmit={handleDirectBanIp} className="grid grid-cols-1 items-end gap-3 md:grid-cols-12">
+                <Field label="IP address" htmlFor="bans-ip" className="md:col-span-4">
+                  <Input
+                    id="bans-ip"
+                    mono
+                    value={banIpInput}
+                    onChange={(e) => setBanIpInput(e.target.value)}
+                    placeholder="e.g. 104.28.14.2"
+                    required
+                  />
+                </Field>
+                <Field label="Reason" htmlFor="bans-reason" className="md:col-span-5">
+                  <Input
+                    id="bans-reason"
+                    value={banReasonInput}
+                    onChange={(e) => setBanReasonInput(e.target.value)}
+                    placeholder="e.g. Tampering, scraper, alt abuse"
+                  />
+                </Field>
+                <div className="md:col-span-3">
+                  <Button type="submit" variant="danger" className="w-full" loading={banningIp} disabled={!banIpInput.trim()}>
+                    <ShieldBan />
+                    Ban IP
+                  </Button>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Direct IP Ban</h3>
-                  <p className="text-[11px] text-gray-400">
-                    Immediately blacklists the IP from claiming keys, executing loaders, or verifying sessions.
-                  </p>
-                </div>
-              </div>
-            </div>
+              </form>
+            </CardBody>
+          </Card>
 
-            <form onSubmit={handleDirectBanIp} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end pt-1">
-              <div className="md:col-span-4 space-y-1">
-                <label className="text-[11px] font-semibold text-gray-300">IP Address</label>
-                <input
-                  type="text"
-                  value={banIpInput}
-                  onChange={(e) => setBanIpInput(e.target.value)}
-                  placeholder="e.g. 192.168.1.100 or 104.28.14.2"
-                  className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none focus:border-rose-500"
-                  required
-                />
+          {/* Active bans */}
+          <div>
+            <TableToolbar className="justify-between">
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-title font-semibold text-fg">IP blacklist</h3>
+                <span className="font-data text-caption text-fg-subtle">{Object.keys(bannedIps).length}</span>
               </div>
-              <div className="md:col-span-5 space-y-1">
-                <label className="text-[11px] font-semibold text-gray-300">Ban Reason</label>
-                <input
-                  type="text"
-                  value={banReasonInput}
-                  onChange={(e) => setBanReasonInput(e.target.value)}
-                  placeholder="Reason for blacklist (e.g. Tampering, Scraper, Alt abuse)"
-                  className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-rose-500"
-                />
-              </div>
-              <div className="md:col-span-3">
-                <button
-                  type="submit"
-                  disabled={banningIp || !banIpInput.trim()}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/20 transition-all disabled:opacity-50"
-                >
-                  <ShieldBan className="w-3.5 h-3.5" />
-                  <span>{banningIp ? "Banning IP..." : "Ban IP Address"}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Active Bans Table */}
-          <div className="bg-[#12141d] border border-gray-800 rounded-xl overflow-hidden shadow-xl">
-            <div className="p-3 bg-[#0e1017] border-b border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-gray-300 font-semibold">
-                <span>Active IP Blacklist</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                  {Object.keys(bannedIps).length} Banned
-                </span>
-              </div>
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={banFilterSearch}
-                  onChange={(e) => setBanFilterSearch(e.target.value)}
-                  placeholder="Search by IP or reason..."
-                  className="w-full bg-[#090b10] border border-gray-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#0b0d14] border-b border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="p-3.5">Banned IP</th>
-                    <th className="p-3.5">Reason</th>
-                    <th className="p-3.5">Banned Timestamp</th>
-                    <th className="p-3.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800/60">
-                  {Object.keys(bannedIps).length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="text-center py-10 text-gray-500">
-                        No banned IPs. Your blacklist is empty.
-                      </td>
-                    </tr>
-                  ) : (
-                    Object.entries(bannedIps)
-                      .filter(([ip, data]) => {
-                        if (!banFilterSearch.trim()) return true;
-                        const q = banFilterSearch.toLowerCase();
-                        return ip.toLowerCase().includes(q) || (data.reason || "").toLowerCase().includes(q);
-                      })
-                      .map(([ip, data]) => (
-                        <tr key={ip} className="hover:bg-gray-800/30">
-                          <td className="p-3.5 font-mono font-bold text-rose-400">{ip}</td>
-                          <td className="p-3.5 text-gray-300">{data.reason}</td>
-                          <td className="p-3.5 text-gray-500 font-mono text-[11px]">
-                            {new Date(data.banned_at).toLocaleString()}
-                          </td>
-                          <td className="p-3.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleUnbanIp(ip)}
-                              className="px-3 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 font-medium text-[11px] transition-colors"
-                            >
-                              Unban IP
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+              <Input
+                size="sm"
+                value={banFilterSearch}
+                onChange={(e) => setBanFilterSearch(e.target.value)}
+                placeholder="Search IP or reason"
+                aria-label="Search banned IPs"
+                leading={<Search />}
+                className="w-full sm:w-64"
+              />
+            </TableToolbar>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>IP</TableHead>
+                  <TableHead>Reason</TableHead>
+                  <TableHead>Banned at</TableHead>
+                  <TableHead align="right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.keys(bannedIps).length === 0 ? (
+                  <TableEmpty colSpan={4} title="No banned IPs" description="Ban an IP above or from a player row." />
+                ) : (
+                  Object.entries(bannedIps)
+                    .filter(([ip, data]) => {
+                      if (!banFilterSearch.trim()) return true;
+                      const q = banFilterSearch.toLowerCase();
+                      return ip.toLowerCase().includes(q) || (data.reason || "").toLowerCase().includes(q);
+                    })
+                    .map(([ip, data]) => (
+                      <TableRow key={ip}>
+                        <TableCell mono className="text-danger-text">
+                          {ip}
+                        </TableCell>
+                        <TableCell truncate={420}>{data.reason}</TableCell>
+                        <TableCell mono muted>
+                          {new Date(data.banned_at).toLocaleString()}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button size="xs" onClick={() => handleUnbanIp(ip)}>
+                            Unban
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                )}
+              </TableBody>
+            </Table>
           </div>
         </div>
       )}
 
       {/* IN-GAME ANNOUNCEMENTS TAB */}
       {activeTab === "announcements" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#12141d] border border-gray-800 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <Megaphone className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  Global In-Game Announcements
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    {announcements.length} Sent
-                  </span>
-                </h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Live banners slide down into Roblox player screens in real-time through heartbeat command dispatching.
-                </p>
-              </div>
-            </div>
+        <div>
+          <TableToolbar className="justify-between">
+            <p className="text-body-sm text-fg-muted">
+              Banners slide into players&apos; screens on their next heartbeat.
+            </p>
+            <Button variant="primary" size="sm" onClick={() => setAnnouncementModal(true)}>
+              <Megaphone />
+              New announcement
+            </Button>
+          </TableToolbar>
 
-            <button
-              type="button"
-              onClick={() => setAnnouncementModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-md shadow-amber-600/20 transition-all self-start sm:self-auto"
-            >
-              <Megaphone className="w-4 h-4" />
-              New Announcement
-            </button>
-          </div>
-
-          <div className="bg-[#12141d] border border-gray-800 rounded-xl overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#0b0d14] border-b border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[10px]">
-                  <tr>
-                    <th className="p-3.5">Announcement</th>
-                    <th className="p-3.5">Target Scope</th>
-                    <th className="p-3.5">Duration</th>
-                    <th className="p-3.5">Dispatched At</th>
-                    <th className="p-3.5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800/60">
-                  {announcements.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-12 text-gray-500">
-                        <Megaphone className="w-8 h-8 text-gray-600 mx-auto mb-2 opacity-60" />
-                        <p className="text-sm text-gray-300 font-semibold">No announcements dispatched yet</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Click &quot;New Announcement&quot; to broadcast a live notification to all players.
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    announcements.map((a) => {
-                      const targetScript = scriptsList.find((s) => s.id === a.script_id);
-                      return (
-                        <tr key={a.id} className="hover:bg-gray-800/30 transition-colors">
-                          <td className="p-3.5">
-                            <span className="font-bold text-white block">{a.title}</span>
-                            <span className="text-[11px] text-gray-400 mt-0.5 block max-w-md">
-                              {a.message}
-                            </span>
-                          </td>
-                          <td className="p-3.5">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-300 border border-blue-500/30">
-                              {a.script_id === "all" ? "All Scripts" : targetScript ? targetScript.name : a.script_id}
-                            </span>
-                          </td>
-                          <td className="p-3.5 font-mono text-gray-300">
-                            {a.duration_seconds}s
-                          </td>
-                          <td className="p-3.5 font-mono text-gray-400 text-[11px]">
-                            {new Date(a.created_at).toLocaleString()}
-                          </td>
-                          <td className="p-3.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteAnnouncement(a.id)}
-                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors"
-                              title="Delete announcement record"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Announcement</TableHead>
+                <TableHead>Scope</TableHead>
+                <TableHead align="right">Duration</TableHead>
+                <TableHead>Sent at</TableHead>
+                <TableHead align="right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {announcements.length === 0 ? (
+                <TableEmpty
+                  colSpan={5}
+                  title="No announcements sent yet"
+                  description="Broadcast one to show a live banner to every connected player."
+                  action={
+                    <Button size="sm" onClick={() => setAnnouncementModal(true)}>
+                      <Megaphone />
+                      New announcement
+                    </Button>
+                  }
+                />
+              ) : (
+                announcements.map((a) => {
+                  const targetScript = scriptsList.find((s) => s.id === a.script_id);
+                  return (
+                    <TableRow key={a.id}>
+                      <TableCell className="py-1">
+                        <span className="block font-medium text-fg">{a.title}</span>
+                        <span className="block max-w-md truncate text-caption text-fg-muted" title={a.message}>
+                          {a.message}
+                        </span>
+                      </TableCell>
+                      <TableCell muted>
+                        {a.script_id === "all" ? "All scripts" : targetScript ? targetScript.name : a.script_id}
+                      </TableCell>
+                      <TableCell mono align="right">
+                        {a.duration_seconds}s
+                      </TableCell>
+                      <TableCell mono muted>
+                        {new Date(a.created_at).toLocaleString()}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          iconOnly
+                          onClick={() => handleDeleteAnnouncement(a.id)}
+                          title="Delete announcement record"
+                          aria-label="Delete announcement record"
+                          className="hover:bg-danger/10 hover:text-danger-text"
+                        >
+                          <Trash2 />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
 
@@ -1602,439 +1453,255 @@ export default function PlayersPage() {
       {/* DMS / CONTACT DEV TAB */}
       {activeTab === "dms" && <DmsManager />}
 
-      {/* Dismissable Screen Message Modal */}
-      {messageModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#12141e] border border-gray-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Send className="w-4 h-4 text-blue-400" />
-                Send In-Game Message
-              </h3>
-              <button
-                type="button"
-                onClick={() => setMessageModal(null)}
-                className="text-gray-400 hover:text-white text-xs"
-              >
-                ✕
-              </button>
-            </div>
+      {/* In-game message */}
+      <Modal
+        open={!!messageModal}
+        onClose={() => setMessageModal(null)}
+        title="Send in-game message"
+        description={
+          <>
+            Shows a dismissable popup to <strong className="font-data text-fg">{messageModal?.username}</strong>.
+          </>
+        }
+        footer={
+          <>
+            <Button onClick={() => setMessageModal(null)}>Cancel</Button>
+            <Button variant="primary" onClick={handleSendMessage}>
+              <Send />
+              Send to player
+            </Button>
+          </>
+        }
+      >
+        <Field label="Message" htmlFor="player-message">
+          <Textarea
+            id="player-message"
+            rows={3}
+            value={messageText}
+            onChange={(e) => setMessageText(e.target.value)}
+            placeholder="e.g. Server maintenance starts in 5 minutes."
+          />
+        </Field>
+      </Modal>
 
-            <p className="text-xs text-gray-400">
-              Sending a dismissable popup / billboard to{" "}
-              <strong className="text-white">{messageModal.username}</strong>:
+      {/* Remote Luau code */}
+      <Modal
+        open={!!codeModal}
+        onClose={() => setCodeModal(null)}
+        size="lg"
+        title="Run Luau code remotely"
+        description={
+          <>
+            Runs in <strong className="font-data text-fg">{codeModal?.username}</strong>&apos;s Roblox session on the next heartbeat.
+          </>
+        }
+        footer={
+          <>
+            <Button onClick={() => setCodeModal(null)}>Cancel</Button>
+            <Button variant="primary" onClick={handleExecuteCode}>
+              <Code2 />
+              Run code
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-caption text-fg-subtle">Templates</span>
+            <Button size="xs" onClick={() => setCodeText('print("Aero Auth: Hello from dashboard!")')}>
+              Print test
+            </Button>
+            <Button
+              size="xs"
+              onClick={() =>
+                setCodeText('pcall(function() game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 48 end)')
+              }
+            >
+              Speed 48
+            </Button>
+            <Button
+              size="xs"
+              onClick={() =>
+                setCodeText(
+                  'game:GetService("StarterGui"):SetCore("SendNotification", { Title = "Aero Auth", Text = "Admin executed remote code in your session.", Duration = 6 })'
+                )
+              }
+            >
+              Client notification
+            </Button>
+          </div>
+          <Textarea
+            mono
+            rows={10}
+            value={codeText}
+            onChange={(e) => setCodeText(e.target.value)}
+            placeholder={"-- Luau code to run in game\nprint('Hello Roblox')"}
+            aria-label="Luau code"
+            spellCheck={false}
+          />
+        </div>
+      </Modal>
+
+      {/* Teleport / server hop */}
+      <Modal
+        open={!!teleportModal}
+        onClose={() => setTeleportModal(null)}
+        title="Teleport player"
+        description={
+          <>
+            Move <strong className="font-data text-fg">{teleportModal?.username}</strong> to another server or place.
+          </>
+        }
+        footer={
+          <>
+            <Button onClick={() => setTeleportModal(null)}>Cancel</Button>
+            <Button variant="primary" onClick={handleTeleport}>
+              <Compass />
+              Teleport
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Tabs variant="segmented" value={teleportMode} onValueChange={(v) => setTeleportMode(v as "hop" | "place")}>
+            <TabsList className="flex w-full">
+              <TabsTrigger value="hop" className="flex-1 justify-center">
+                Server hop (same game)
+              </TabsTrigger>
+              <TabsTrigger value="place" className="flex-1 justify-center">
+                Place ID
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {teleportMode === "hop" ? (
+            <p className="text-body-sm text-fg-muted">
+              Finds another public server of the same game through the Roblox Games API and teleports the player there.
             </p>
+          ) : (
+            <Field
+              label="Roblox place ID"
+              htmlFor="teleport-place"
+              hint={
+                <>
+                  Calls <code className="font-data text-fg-muted">TeleportService:Teleport(placeId)</code> in the player&apos;s session.
+                </>
+              }
+            >
+              <Input
+                id="teleport-place"
+                mono
+                value={targetPlaceId}
+                onChange={(e) => setTargetPlaceId(e.target.value)}
+                placeholder="e.g. 189707"
+              />
+            </Field>
+          )}
+        </div>
+      </Modal>
 
-            <textarea
+      {/* Global announcement */}
+      <Modal
+        open={announcementModal}
+        onClose={() => setAnnouncementModal(false)}
+        title="Broadcast announcement"
+        description="Shows a banner at the top of every connected player's screen."
+        footer={
+          <>
+            <Button onClick={() => setAnnouncementModal(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleBroadcastAnnouncement}>
+              <Megaphone />
+              Broadcast
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Field label="Script scope" htmlFor="ann-script">
+            <Select id="ann-script" value={announcementScript} onChange={(e) => setAnnouncementScript(e.target.value)}>
+              <option value="all">All scripts (global)</option>
+              {scriptsList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} (/{s.slug})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Banner title" htmlFor="ann-title">
+            <Input
+              id="ann-title"
+              value={announcementTitle}
+              onChange={(e) => setAnnouncementTitle(e.target.value)}
+              placeholder="e.g. System update"
+            />
+          </Field>
+          <Field label="Message" htmlFor="ann-message">
+            <Textarea
+              id="ann-message"
               rows={3}
-              value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
-              placeholder="e.g. Notice: Server maintenance starting in 5 minutes."
-              className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500"
+              value={announcementMessage}
+              onChange={(e) => setAnnouncementMessage(e.target.value)}
+              placeholder="e.g. v2.4 is out. Re-execute to get the new features."
             />
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setMessageModal(null)}
-                className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSendMessage}
-                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-600/20"
-              >
-                Send to Player
-              </button>
-            </div>
-          </div>
+          </Field>
+          <Field label="On screen for" htmlFor="ann-duration">
+            <Select id="ann-duration" value={announcementDuration} onChange={(e) => setAnnouncementDuration(e.target.value)}>
+              <option value="5">5 seconds</option>
+              <option value="10">10 seconds (default)</option>
+              <option value="15">15 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="60">60 seconds</option>
+            </Select>
+          </Field>
         </div>
-      )}
+      </Modal>
 
-      {/* Remote Luau Code Injection Modal */}
-      {codeModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-[#12141e] border border-gray-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Code2 className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Remote Luau Code Injection</h3>
-                  <p className="text-[11px] text-gray-400">
-                    Executing directly in{" "}
-                    <strong className="text-emerald-300">{codeModal.username}</strong>&apos;s active Roblox runtime.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCodeModal(null)}
-                className="text-gray-400 hover:text-white text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Quick Templates */}
-            <div className="space-y-1">
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block">
-                Quick Templates
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setCodeText('print("Aero Auth: Hello from dashboard!")')}
-                  className="px-2 py-1 rounded bg-[#0b0d14] hover:bg-gray-800 border border-gray-700 text-[10px] text-gray-300 font-mono transition-colors"
-                >
-                  Print Test
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCodeText(
-                      'pcall(function() game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = 48 end)'
-                    )
-                  }
-                  className="px-2 py-1 rounded bg-[#0b0d14] hover:bg-gray-800 border border-gray-700 text-[10px] text-gray-300 font-mono transition-colors"
-                >
-                  Speed 48
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCodeText(
-                      'game:GetService("StarterGui"):SetCore("SendNotification", { Title = "Aero Auth", Text = "Admin executed remote code in your session.", Duration = 6 })'
-                    )
-                  }
-                  className="px-2 py-1 rounded bg-[#0b0d14] hover:bg-gray-800 border border-gray-700 text-[10px] text-gray-300 font-mono transition-colors"
-                >
-                  Client Notification
-                </button>
-              </div>
-            </div>
-
-            <textarea
-              rows={8}
-              value={codeText}
-              onChange={(e) => setCodeText(e.target.value)}
-              placeholder="-- Enter arbitrary Luau code to execute in-game&#10;print('Hello Roblox')"
-              className="w-full bg-[#0b0d14] border border-gray-700/80 rounded-xl p-3 font-mono text-xs text-emerald-300 outline-none focus:border-emerald-500 leading-relaxed"
+      {/* Manual IP ban */}
+      <Modal
+        open={banModalOpen}
+        onClose={() => setBanModalOpen(false)}
+        title="Ban IP address"
+        footer={
+          <>
+            <Button onClick={() => setBanModalOpen(false)}>Cancel</Button>
+            <Button
+              type="submit"
+              form="ban-ip-form"
+              variant="danger"
+              loading={banningIp}
+              disabled={!banIpInput.trim()}
+            >
+              <ShieldBan />
+              Ban IP
+            </Button>
+          </>
+        }
+      >
+        <form id="ban-ip-form" onSubmit={handleDirectBanIp} className="space-y-3">
+          <Field label="IP address" htmlFor="ban-ip">
+            <Input
+              id="ban-ip"
+              mono
+              value={banIpInput}
+              onChange={(e) => setBanIpInput(e.target.value)}
+              placeholder="e.g. 104.28.14.2"
+              required
+              data-autofocus
             />
-
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-400" />
-                Code executes via executor loadstring on next heartbeat
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCodeModal(null)}
-                  className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExecuteCode}
-                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
-                >
-                  <Code2 className="w-3.5 h-3.5" />
-                  Dispatch Code
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Player Teleport & Server Hop Modal */}
-      {teleportModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#12141e] border border-gray-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                  <Compass className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Teleport & Server Hop</h3>
-                  <p className="text-[11px] text-gray-400">
-                    Remote teleportation for <strong className="text-purple-300">{teleportModal.username}</strong>
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTeleportModal(null)}
-                className="text-gray-400 hover:text-white text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Mode Selector */}
-            <div className="grid grid-cols-2 gap-2 p-1 bg-[#0b0d14] border border-gray-800 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setTeleportMode("hop")}
-                className={`py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  teleportMode === "hop"
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                Server Hop (Same Game)
-              </button>
-              <button
-                type="button"
-                onClick={() => setTeleportMode("place")}
-                className={`py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  teleportMode === "place"
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                Target Place ID
-              </button>
-            </div>
-
-            {teleportMode === "hop" ? (
-              <div className="p-3 bg-purple-500/10 border border-purple-500/25 rounded-xl text-xs text-purple-200 space-y-1">
-                <p className="font-semibold flex items-center gap-1.5">
-                  <Compass className="w-3.5 h-3.5 text-purple-400" />
-                  Server Hop Description
-                </p>
-                <p className="text-[11px] text-gray-300">
-                  Automatically queries public game instances via Roblox Games API and teleports the player to a different active server.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-300 block">
-                  Target Roblox Place ID:
-                </label>
-                <input
-                  type="text"
-                  value={targetPlaceId}
-                  onChange={(e) => setTargetPlaceId(e.target.value)}
-                  placeholder="e.g. 189707 or 6068496246"
-                  className="w-full bg-[#0b0d14] border border-gray-700/80 rounded-xl p-2.5 font-mono text-xs text-white outline-none focus:border-purple-500"
-                />
-                <p className="text-[10px] text-gray-500">
-                  Calls <code className="text-purple-300">TeleportService:Teleport(placeId)</code> in player context.
-                </p>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setTeleportModal(null)}
-                className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleTeleport}
-                className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md shadow-purple-600/20 flex items-center gap-1.5"
-              >
-                <Compass className="w-3.5 h-3.5" />
-                Dispatch Teleport
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Global In-Game Announcement Modal */}
-      {announcementModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-[#12141e] border border-gray-800 rounded-2xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                  <Megaphone className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white">Broadcast In-Game Announcement</h3>
-                  <p className="text-[11px] text-gray-400">
-                    Displays animated top banner on connected player screens.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAnnouncementModal(false)}
-                className="text-gray-400 hover:text-white text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-300 block mb-1">
-                  Target Script Scope:
-                </label>
-                <select
-                  value={announcementScript}
-                  onChange={(e) => setAnnouncementScript(e.target.value)}
-                  className="w-full bg-[#0b0d14] border border-gray-700/80 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="all">All Scripts (Global Broadcast)</option>
-                  {scriptsList.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} (/{s.slug})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-300 block mb-1">
-                  Banner Title:
-                </label>
-                <input
-                  type="text"
-                  value={announcementTitle}
-                  onChange={(e) => setAnnouncementTitle(e.target.value)}
-                  placeholder="e.g. SYSTEM UPDATE / MAINTENANCE"
-                  className="w-full bg-[#0b0d14] border border-gray-700/80 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-300 block mb-1">
-                  Announcement Message:
-                </label>
-                <textarea
-                  rows={3}
-                  value={announcementMessage}
-                  onChange={(e) => setAnnouncementMessage(e.target.value)}
-                  placeholder="e.g. New update v2.4 released! Re-execute for new features."
-                  className="w-full bg-[#0b0d14] border border-gray-700/80 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-300 block mb-1">
-                  On-Screen Duration:
-                </label>
-                <select
-                  value={announcementDuration}
-                  onChange={(e) => setAnnouncementDuration(e.target.value)}
-                  className="w-full bg-[#0b0d14] border border-gray-700/80 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="5">5 Seconds</option>
-                  <option value="10">10 Seconds (Default)</option>
-                  <option value="15">15 Seconds</option>
-                  <option value="30">30 Seconds</option>
-                  <option value="60">60 Seconds</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setAnnouncementModal(false)}
-                className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleBroadcastAnnouncement}
-                className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-md shadow-amber-600/20 flex items-center gap-1.5"
-              >
-                <Megaphone className="w-3.5 h-3.5" />
-                Broadcast Now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MANUAL BAN IP MODAL */}
-      {banModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#12141d] border border-gray-800 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-              <div className="flex items-center gap-2 text-white font-bold text-sm">
-                <div className="w-8 h-8 rounded-lg bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                  <ShieldBan className="w-4 h-4" />
-                </div>
-                <span>Ban IP Address</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setBanModalOpen(false)}
-                className="text-gray-400 hover:text-white text-xs p-1"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleDirectBanIp} className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-300 block mb-1">
-                  Target IP Address:
-                </label>
-                <input
-                  type="text"
-                  value={banIpInput}
-                  onChange={(e) => setBanIpInput(e.target.value)}
-                  placeholder="e.g. 192.168.1.100 or 104.28.14.2"
-                  className="w-full bg-[#0b0d14] border border-gray-700/80 rounded-xl p-2.5 text-xs text-white font-mono outline-none focus:border-rose-500"
-                  required
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-300 block mb-1">
-                  Reason for Blacklist:
-                </label>
-                <input
-                  type="text"
-                  value={banReasonInput}
-                  onChange={(e) => setBanReasonInput(e.target.value)}
-                  placeholder="e.g. Terms of Service Violation / Payload Dumping"
-                  className="w-full bg-[#0b0d14] border border-gray-700/80 rounded-xl p-2.5 text-xs text-white outline-none focus:border-rose-500"
-                />
-              </div>
-
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-[11px] text-rose-300 leading-relaxed">
-                <strong>Warning:</strong> Blacklisting an IP terminates all active sessions associated with it and prevents any future key claims, loader downloads, or script executions from that network.
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-gray-800">
-                <button
-                  type="button"
-                  onClick={() => setBanModalOpen(false)}
-                  className="px-3.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={banningIp || !banIpInput.trim()}
-                  className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md shadow-rose-600/20 flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <ShieldBan className="w-3.5 h-3.5" />
-                  <span>{banningIp ? "Blacklisting..." : "Confirm & Ban IP"}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          </Field>
+          <Field label="Reason" htmlFor="ban-reason">
+            <Input
+              id="ban-reason"
+              value={banReasonInput}
+              onChange={(e) => setBanReasonInput(e.target.value)}
+              placeholder="e.g. Terms of service violation"
+            />
+          </Field>
+          <p className="rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-caption text-danger-text">
+            Banning an IP ends every active session on it and blocks future key claims, loader downloads and script runs from that network.
+          </p>
+        </form>
+      </Modal>
     </div>
   );
 }

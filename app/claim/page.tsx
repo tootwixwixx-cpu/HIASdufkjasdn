@@ -21,11 +21,13 @@ import {
   Clock,
   Lock,
   ChevronRight,
-  SlidersHorizontal,
+  AlertCircle,
 } from "lucide-react";
 import type { CheckpointItem, CreatorProfile } from "@/lib/store";
 import { SOCIAL_PLATFORMS } from "@/lib/social-platforms";
 import { WorkinkLogo } from "@/components/WorkinkLogo";
+import { Alert, Badge, Button, Card, Field, Input, buttonClasses } from "@/components/ui";
+import { cn, focusRing } from "@/lib/utils";
 
 // Fast client-side Proof-of-Work solver (takes ~20ms in genuine browsers, defeats headless HTTP scrapers)
 async function solvePoW(nonce: string, difficulty: number): Promise<string> {
@@ -137,34 +139,38 @@ function SlideToClaim({
   return (
     <div
       ref={trackRef}
-      className={`relative w-full h-12 rounded-xl border flex items-center select-none overflow-hidden transition-all ${
+      className={cn(
+        "relative flex h-12 w-full select-none items-center overflow-hidden rounded-lg border transition-colors",
         disabled
-          ? "bg-obsidian-850/60 border-obsidian-750 opacity-40 cursor-not-allowed"
+          ? "cursor-not-allowed border-line bg-surface opacity-50"
           : completed
-          ? "bg-emerald-950/30 border-emerald-500/40"
-          : "bg-obsidian-850 border-obsidian-700 shadow-inner"
-      }`}
+          ? "border-success/40 bg-success/[0.08]"
+          : "border-line-strong bg-surface",
+      )}
     >
       {/* Background progress fill */}
       <div
-        className="absolute left-0 top-0 bottom-0 bg-white/10 transition-all pointer-events-none"
+        className={cn(
+          "pointer-events-none absolute bottom-0 left-0 top-0 transition-all",
+          completed ? "bg-success/15" : "bg-accent/15",
+        )}
         style={{ width: `${sliderPos + 44}px` }}
       />
 
       {/* Guide Text */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs font-bold text-zinc-400">
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center pl-10 text-body-sm font-medium text-fg-muted">
         {loading ? (
-          <span className="flex items-center gap-1.5 text-zinc-300">
-            <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Allocating license key...
+          <span className="flex items-center gap-1.5 text-fg">
+            <RefreshCw className="size-3.5 animate-spin motion-reduce:animate-none" /> Allocating license key...
           </span>
         ) : completed ? (
-          <span className="flex items-center gap-1 text-emerald-400 font-mono">
-            <CheckCircle2 className="w-4 h-4" /> Verified • Generating Key...
+          <span className="flex items-center gap-1.5 text-success-text">
+            <CheckCircle2 className="size-4" /> Verified, generating key...
           </span>
         ) : (
-          <span className="flex items-center gap-1.5 tracking-wide text-zinc-400">
-            <span>Slide to Claim License Key</span>
-            <ArrowRight className="w-3.5 h-3.5 opacity-60" />
+          <span className="flex items-center gap-1.5">
+            <span>Slide to claim your key</span>
+            <ArrowRight className="size-3.5 text-fg-subtle" />
           </span>
         )}
       </div>
@@ -174,19 +180,17 @@ function SlideToClaim({
         onMouseDown={(e) => handleStart(e.clientX)}
         onTouchStart={(e) => e.touches[0] && handleStart(e.touches[0].clientX)}
         style={{ transform: `translateX(${sliderPos}px)` }}
-        className={`absolute left-1 w-10 h-10 rounded-lg flex items-center justify-center transition-transform duration-75 cursor-grab active:cursor-grabbing shadow-md ${
+        aria-hidden
+        className={cn(
+          "absolute left-1 flex h-10 w-10 cursor-grab items-center justify-center rounded-md shadow-popover transition-transform duration-75 active:cursor-grabbing",
           completed
-            ? "bg-emerald-500 text-black cursor-default"
+            ? "cursor-default bg-success text-canvas"
             : disabled
-            ? "bg-zinc-700 text-zinc-400"
-            : "bg-white text-black hover:bg-zinc-200"
-        }`}
-      >
-        {completed ? (
-          <Check className="w-5 h-5 font-bold" />
-        ) : (
-          <Key className="w-4 h-4" />
+            ? "bg-surface-active text-fg-disabled"
+            : "bg-accent text-accent-fg hover:bg-accent-hover",
         )}
+      >
+        {completed ? <Check className="size-5" /> : <Key className="size-4" />}
       </div>
     </div>
   );
@@ -613,12 +617,12 @@ export default function ClaimKeyPage() {
             setClaimToken(data.claimToken);
             setActiveCpIndex(checkpoints.length);
             setWorkinkOpenedCpId(null);
-            setWorkinkSuccessMessage("🎉 All Work.ink tasks verified! Slide the human slider below to unlock your key.");
+            setWorkinkSuccessMessage("All Work.ink tasks verified. Use the slider below to unlock your key.");
           } else {
             const nextIdx = stepToVerify + 1;
             setActiveCpIndex(nextIdx);
             setWorkinkOpenedCpId(null);
-            setWorkinkSuccessMessage(`✓ Work.ink Step #${stepToVerify + 1} completed! Please continue to the next task.`);
+            setWorkinkSuccessMessage(`Work.ink step ${stepToVerify + 1} completed. Continue to the next task.`);
           }
 
           // Immediately persist fresh completion progress so tab-close/refresh retains it
@@ -992,27 +996,20 @@ export default function ClaimKeyPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-obsidian-950 text-zinc-100 selection:bg-white selection:text-black">
+    <div className="flex min-h-screen flex-col bg-canvas text-fg">
       <Navbar />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex items-center justify-center relative">
-        {/* Glow backdrop matching site style */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-zinc-700/10 rounded-full blur-[128px] pointer-events-none" />
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 w-full items-start z-10">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 items-start justify-center p-4 sm:p-6 lg:items-center lg:p-8">
+        <div className="grid w-full grid-cols-1 items-start gap-4 lg:grid-cols-12 lg:gap-6">
           {/* LEFT COLUMN: CREATOR PROFILE CARD */}
-          <div className="lg:col-span-5 bg-obsidian-900 border border-obsidian-800 rounded-2xl p-6 sm:p-7 shadow-2xl relative overflow-hidden flex flex-col items-center text-center">
-            {/* Background ambient lighting */}
-            <div className="absolute -top-16 -left-16 w-48 h-48 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-
-            {/* Avatar with Guns.lol glowing ring & pulse */}
-            <div className="relative mb-3.5 group">
-              <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-purple-500 via-blue-500 to-emerald-400 shadow-xl shadow-purple-500/20">
+          <Card className="flex flex-col items-center p-6 text-center lg:col-span-5">
+            {/* Avatar */}
+            <div className="relative mb-3.5">
+              <div className="size-20 rounded-full p-0.5 ring-1 ring-line-strong">
                 <img
                   src={profile.avatar_url || "https://api.dicebear.com/7.x/bottts/svg?seed=Revile21"}
-                  alt="Creator Avatar"
-                  className="w-full h-full rounded-full object-cover bg-black"
+                  alt="Creator avatar"
+                  className="h-full w-full rounded-full bg-canvas object-cover"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src =
@@ -1020,46 +1017,46 @@ export default function ClaimKeyPage() {
                   }}
                 />
               </div>
-              <span className="absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-obsidian-900 animate-pulse" />
+              <span
+                aria-hidden
+                className="absolute bottom-1 right-1 size-3.5 rounded-full border-2 border-surface-raised bg-success"
+              />
             </div>
 
             {/* Display Name */}
             <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-wide">
-                {profile.display_name || "Revile"}
-              </h2>
-              <span className="flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <h2 className="text-heading font-semibold text-fg">{profile.display_name || "Revile"}</h2>
+              <Badge tone="success" dot>
                 Official
-              </span>
+              </Badge>
             </div>
 
-            {/* Emblems */}
+            {/* Emblems (colors are creator-configured) */}
             {profile.emblems && profile.emblems.length > 0 && (
-              <div className="flex flex-wrap items-center justify-center gap-1.5 my-3">
-                {profile.emblems.map((emb) => (
-                  <div
-                    key={emb.id}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wide uppercase border bg-obsidian-850"
-                    style={{
-                      borderColor: `${emb.color || "#3b82f6"}40`,
-                      color: emb.color || "#3b82f6",
-                    }}
-                  >
-                    {renderEmblemIcon(emb.icon)}
-                    <span>{emb.label}</span>
-                  </div>
-                ))}
+              <div className="my-3 flex flex-wrap items-center justify-center gap-1.5">
+                {profile.emblems.map((emb) => {
+                  const color = emb.color || "#5e9bff";
+                  return (
+                    <Badge
+                      key={emb.id}
+                      className="bg-surface"
+                      style={{ color, ["--tw-ring-color" as string]: `${color}55` } as React.CSSProperties}
+                    >
+                      {renderEmblemIcon(emb.icon)}
+                      <span>{emb.label}</span>
+                    </Badge>
+                  );
+                })}
               </div>
             )}
 
             {/* Bio */}
-            <p className="text-xs text-zinc-400 max-w-sm leading-relaxed mb-4">
+            <p className="mb-4 max-w-sm text-body-sm text-fg-muted">
               {profile.bio || "Lead Developer & Script Engineer."}
             </p>
 
-            {/* Branded Social Buttons (All Supported Platforms with SVG icons) */}
-            <div className="w-full flex flex-wrap items-center justify-center gap-2 pt-3 border-t border-obsidian-800">
+            {/* Social links (third-party brand colors kept on the icons) */}
+            <div className="flex w-full flex-wrap items-center justify-center gap-2 border-t border-line pt-4">
               {SOCIAL_PLATFORMS.map((platform) => {
                 const isEnabled = profile.social_toggles?.[platform.key] !== false;
                 const link = (profile.socials as Record<string, string | undefined>)[platform.key];
@@ -1071,10 +1068,9 @@ export default function ClaimKeyPage() {
                     href={link}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3 py-1.5 rounded-xl bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-750 text-zinc-200 hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 shadow-sm"
-                    style={{ borderLeftColor: platform.color, borderLeftWidth: "3px" }}
+                    className={buttonClasses({ variant: "secondary", size: "sm" })}
                   >
-                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" style={{ color: platform.color }}>
+                    <svg className="fill-current" viewBox="0 0 24 24" style={{ color: platform.color }} aria-hidden>
                       <path d={platform.path} />
                     </svg>
                     <span>{platform.name}</span>
@@ -1084,99 +1080,99 @@ export default function ClaimKeyPage() {
             </div>
 
             {claimId && (
-              <div className="mt-4 pt-3 border-t border-obsidian-800 w-full text-[10px] text-zinc-500 font-mono truncate">
+              <div className="mt-4 w-full truncate border-t border-line pt-3 font-data text-caption text-fg-subtle">
                 HWID: {claimId.slice(0, 16)}...
               </div>
             )}
-          </div>
+          </Card>
 
           {/* RIGHT COLUMN: MAIN KEY CLAIM CONTAINER */}
-          <div className="lg:col-span-7 p-6 rounded-2xl bg-obsidian-900 border border-obsidian-800 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-obsidian-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white">
-                  <Key className="w-4 h-4" />
-                </div>
+          <Card className="relative p-5 sm:p-6 lg:col-span-7">
+            <div className="mb-5 flex items-start justify-between gap-3 border-b border-line pb-4">
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-accent-text">
+                  <Key className="size-4" />
+                </span>
                 <div>
-                  <h1 className="text-sm font-bold text-white">License Key Gateway</h1>
-                  <p className="text-[11px] text-zinc-400">
-                    Complete the secure checkpoint tasks below to allocate your key.
+                  <h1 className="text-title font-semibold text-fg">License key gateway</h1>
+                  <p className="text-body-sm text-fg-muted">
+                    Complete the checkpoint tasks below to get your key.
                   </p>
                 </div>
               </div>
 
-              {/* Anti-Bypass Protected Badge */}
-              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-300 text-[10px] font-mono font-semibold">
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                <span>Anti-Bypass Shield</span>
-              </span>
+              <Badge tone="success" className="hidden sm:inline-flex">
+                <ShieldCheck className="size-3" />
+                Anti-bypass shield
+              </Badge>
             </div>
 
             {/* Lockout Banner */}
             {isLockedOut && (
-              <div className="mb-4 p-4 rounded-xl bg-rose-950/50 border border-rose-500/40 text-rose-200 text-xs font-mono space-y-2">
-                <div className="flex items-center gap-2 font-bold text-rose-300">
-                  <Skull className="w-4 h-4 text-rose-400" />
-                  <span>Access Permanently Locked Out</span>
-                </div>
-                <p className="text-zinc-300 text-[11px] leading-relaxed">
-                  Your network IP and device HWID have been locked out due to repeated checkpoint bypass violations (3/3 attempts). You can no longer claim license keys.
-                </p>
-                <div className="pt-2 border-t border-rose-900/50 flex items-center justify-between text-[11px]">
-                  <span className="text-zinc-400">If you believe this is an error, appeal in Discord:</span>
-                  <a href={discordInvite} target="_blank" rel="noreferrer" className="text-rose-300 hover:text-white underline font-semibold">Join Discord</a>
-                </div>
-              </div>
+              <Alert
+                tone="danger"
+                icon={<Skull />}
+                title="Access permanently locked out"
+                className="mb-4"
+                action={
+                  <>
+                    <span className="text-caption text-fg-subtle">Think this is an error? Appeal in Discord.</span>
+                    <a
+                      href={discordInvite}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={buttonClasses({ variant: "secondary", size: "xs" })}
+                    >
+                      Join Discord
+                    </a>
+                  </>
+                }
+              >
+                Your network IP and device HWID have been locked out due to repeated checkpoint bypass violations (3/3
+                attempts). You can no longer claim license keys.
+              </Alert>
             )}
 
             {/* VPN Detected Banner */}
             {vpnDetected && (
-              <div className="mb-4 p-4 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-300 text-xs">
-                <div className="flex items-start gap-2.5">
-                  <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-bold text-rose-200">VPN / Proxy Detected</h4>
-                    <p className="text-zinc-300 mt-1 leading-relaxed">
-                      To prevent abuse, claiming license keys through a VPN or Proxy network is strictly disabled. Please turn off your VPN, then reload this page.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => window.location.reload()}
-                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-black text-xs font-semibold hover:bg-zinc-200 transition-colors"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Reload Page</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <Alert
+                tone="danger"
+                icon={<ShieldAlert />}
+                title="VPN or proxy detected"
+                className="mb-4"
+                action={
+                  <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+                    <RefreshCw />
+                    <span>Reload page</span>
+                  </Button>
+                }
+              >
+                To prevent abuse, keys can&apos;t be claimed through a VPN or proxy network. Turn off your VPN, then
+                reload this page.
+              </Alert>
             )}
 
             {/* Error Banner */}
             {error && !vpnDetected && (
-              <div className="mb-4 p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 text-rose-300 text-xs font-mono leading-relaxed">
-                ⚠️ {error}
-              </div>
+              <Alert tone="danger" icon={<AlertCircle />} className="mb-4">
+                {error}
+              </Alert>
             )}
 
             {/* STAGE 1: CHECKPOINTS */}
             {step === "verification" && !vpnDetected && (
               <div className="space-y-5">
                 {!scriptSlug && availableScripts.length > 0 ? (
-                  <div className="p-4 rounded-xl bg-obsidian-850 border border-obsidian-700 space-y-3">
-                    <div className="flex items-center justify-between text-xs font-bold text-white">
-                      <span className="flex items-center gap-1.5">
-                        <Lock className="w-4 h-4 text-zinc-400" />
-                        Select Target Script
+                  <Card variant="inset" className="space-y-3 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-body-sm font-semibold text-fg">
+                        <Lock className="size-4 text-fg-subtle" />
+                        Select a script
                       </span>
-                      <span className="text-[10px] text-amber-400 font-mono font-semibold bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
-                        Required
-                      </span>
+                      <Badge tone="warning">Required</Badge>
                     </div>
-                    <p className="text-xs text-zinc-400">
-                      Keys are uniquely restricted to a single script:
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <p className="text-body-sm text-fg-muted">Each key works for one script only.</p>
+                    <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
                       {availableScripts.map((s) => (
                         <button
                           key={s.id}
@@ -1196,30 +1192,33 @@ export default function ClaimKeyPage() {
                               })
                               .catch(() => {});
                           }}
-                          className="p-3 rounded-xl border border-obsidian-700 bg-obsidian-800/60 hover:border-zinc-400 text-left transition-all flex items-center justify-between group"
+                          className={cn(
+                            "group flex items-center justify-between rounded-md border border-line bg-surface-raised p-3 text-left transition-colors duration-100 hover:border-line-strong hover:bg-surface-hover",
+                            focusRing,
+                          )}
                         >
-                          <div>
-                            <span className="text-xs font-bold text-white block">
-                              {s.name}
-                            </span>
-                            <span className="text-[10px] font-mono text-zinc-400">/{s.slug}</span>
+                          <div className="min-w-0">
+                            <span className="block truncate text-body-sm font-semibold text-fg">{s.name}</span>
+                            <span className="font-data text-caption text-fg-subtle">/{s.slug}</span>
                           </div>
-                          <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:text-white transition-all" />
+                          <ChevronRight className="size-4 shrink-0 text-fg-subtle group-hover:text-fg" />
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </Card>
                 ) : targetScript ? (
-                  <div className="p-3 rounded-xl bg-obsidian-850 border border-obsidian-700 flex items-center justify-between text-xs font-mono">
-                    <div className="flex items-center gap-2 text-zinc-300">
-                      <Lock className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>
-                        Target: <strong className="text-white">{targetScript.name}</strong> ({targetScript.slug})
+                  <Card variant="inset" className="flex items-center justify-between gap-2 px-3 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2 text-body-sm text-fg-muted">
+                      <Lock className="size-3.5 shrink-0 text-fg-subtle" />
+                      <span className="truncate">
+                        Script: <strong className="font-semibold text-fg">{targetScript.name}</strong>{" "}
+                        <span className="font-data text-caption text-fg-subtle">/{targetScript.slug}</span>
                       </span>
                     </div>
                     {availableScripts.length > 1 && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
+                        size="xs"
                         onClick={() => {
                           setScriptSlug("");
                           setTargetScript(null);
@@ -1228,27 +1227,27 @@ export default function ClaimKeyPage() {
                           setClaimToken(null);
                           setCurrentStepToken(null);
                         }}
-                        className="text-[11px] text-zinc-400 hover:text-white underline font-medium"
                       >
                         Change
-                      </button>
+                      </Button>
                     )}
-                  </div>
+                  </Card>
                 ) : null}
 
                 {claimMethod === "discord_oauth" ? (
-                  <div className="p-4 rounded-xl bg-obsidian-850 border border-obsidian-700 space-y-3">
-                    <div className="flex items-center justify-between text-xs font-semibold text-zinc-300">
-                      <span>Step 1: Join Discord Community</span>
+                  <Card variant="inset" className="space-y-3 p-4">
+                    <div className="flex items-center justify-between gap-2 text-body-sm font-semibold text-fg">
+                      <span>Step 1: Join the Discord community</span>
                       {discordJoined ? (
-                        <span className="text-emerald-400 flex items-center gap-1 text-[11px] font-mono">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Verified
-                        </span>
+                        <Badge tone="success">
+                          <CheckCircle2 className="size-3" />
+                          Done
+                        </Badge>
                       ) : (
-                        <span className="text-amber-400 text-[11px] font-mono">Required</span>
+                        <Badge tone="warning">Required</Badge>
                       )}
                     </div>
-                    <p className="text-xs text-zinc-400">
+                    <p className="text-body-sm text-fg-muted">
                       Active membership in our Discord server is required to claim a key.
                     </p>
                     <a
@@ -1256,204 +1255,198 @@ export default function ClaimKeyPage() {
                       target="_blank"
                       rel="noreferrer"
                       onClick={() => setDiscordJoined(true)}
-                      className="w-full py-2.5 px-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-xs transition-all flex items-center justify-center gap-2"
+                      className={buttonClasses({
+                        variant: "primary",
+                        size: "lg",
+                        className: "w-full bg-[#5865F2] text-white hover:bg-[#4752C4] active:bg-[#4752C4]",
+                      })}
                     >
-                      <span>Join Discord Server</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <span>Join Discord server</span>
+                      <ExternalLink />
                     </a>
 
-                    <div className="pt-2 border-t border-obsidian-750 space-y-1.5">
-                      <label className="block text-xs font-semibold text-zinc-300">
-                        Step 2: Enter Discord Username
-                      </label>
-                      <input
-                        type="text"
-                        value={discordUsername}
-                        onChange={(e) => setDiscordUsername(e.target.value)}
-                        placeholder="e.g. revile or username"
-                        className="w-full bg-obsidian-800 border border-obsidian-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 outline-none focus:border-zinc-400 font-mono"
-                      />
+                    <div className="border-t border-line pt-3">
+                      <Field label="Step 2: Enter your Discord username" htmlFor="claim-discord-username">
+                        <Input
+                          id="claim-discord-username"
+                          type="text"
+                          mono
+                          value={discordUsername}
+                          onChange={(e) => setDiscordUsername(e.target.value)}
+                          placeholder="e.g. revile"
+                        />
+                      </Field>
                     </div>
-                  </div>
+                  </Card>
                 ) : (
                   /* Checkpoints List */
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between text-xs font-mono text-zinc-400 mb-1">
-                      <span>Checkpoints Required:</span>
-                      <span className="text-emerald-400 font-bold">
-                        {completedCpIds.length} of {checkpoints.length} Completed
+                  <div className="space-y-2">
+                    <div className="mb-1 flex items-center justify-between text-body-sm">
+                      <span className="text-fg-muted">Checkpoints</span>
+                      <span className="font-data text-caption text-fg-muted">
+                        <span className={cn(allCheckpointsDone ? "text-success-text" : "text-fg")}>
+                          {completedCpIds.length}
+                        </span>{" "}
+                        of {checkpoints.length} completed
                       </span>
                     </div>
 
                     {workinkSuccessMessage && (
-                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                        <span>{workinkSuccessMessage}</span>
-                      </div>
+                      <Alert tone="success" icon={<CheckCircle2 />}>
+                        {workinkSuccessMessage}
+                      </Alert>
                     )}
 
-                    {checkpoints.map((cp, idx) => {
-                      const isCompleted = completedCpIds.includes(cp.id);
-                      const isCurrent = idx === activeCpIndex && !isCompleted;
-                      const isLocked = idx > activeCpIndex && !isCompleted;
-                      const isWorkink = Boolean(
-                        cp.duration_seconds === 0 ||
-                        cp.url?.includes("work.ink") ||
-                        cp.url?.includes("workink.net") ||
-                        (cp as any).is_workink
-                      );
+                    <ol className="space-y-2">
+                      {checkpoints.map((cp, idx) => {
+                        const isCompleted = completedCpIds.includes(cp.id);
+                        const isCurrent = idx === activeCpIndex && !isCompleted;
+                        const isLocked = idx > activeCpIndex && !isCompleted;
+                        const isWorkink = Boolean(
+                          cp.duration_seconds === 0 ||
+                          cp.url?.includes("work.ink") ||
+                          cp.url?.includes("workink.net") ||
+                          (cp as any).is_workink
+                        );
 
-                      return (
-                        <div
-                          key={cp.id}
-                          className={`p-4 rounded-xl border transition-all ${
-                            isCompleted
-                              ? "bg-emerald-500/5 border-emerald-500/30"
-                              : isCurrent
-                              ? isWorkink
-                                ? "bg-purple-950/20 border-purple-500/40 shadow-sm"
-                                : "bg-obsidian-800 border-zinc-500 shadow-sm"
-                              : "bg-obsidian-850 border-obsidian-700 opacity-60"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div
-                                className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono text-xs font-bold flex-shrink-0 ${
-                                  isCompleted
-                                    ? "bg-emerald-500/20 text-emerald-300"
-                                    : isCurrent
-                                    ? isWorkink
-                                      ? "bg-purple-500 text-white"
-                                      : "bg-white text-black"
-                                    : "bg-obsidian-750 text-zinc-500"
-                                }`}
-                              >
-                                {isCompleted ? <Check className="w-4 h-4" /> : `#${idx + 1}`}
-                              </div>
-
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <h4
-                                    className={`text-xs font-bold truncate ${
-                                      isCompleted
-                                        ? "text-emerald-300"
-                                        : isCurrent
-                                        ? "text-white"
-                                        : "text-zinc-400"
-                                    }`}
-                                  >
-                                    {cp.title}
-                                  </h4>
-                                  {isWorkink && (
-                                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1.5">
-                                      <WorkinkLogo className="w-3.5 h-3.5 flex-shrink-0" />
-                                      Work.ink
-                                    </span>
+                        return (
+                          <li
+                            key={cp.id}
+                            aria-current={isCurrent ? "step" : undefined}
+                            className={cn(
+                              "rounded-lg border p-3.5 transition-colors",
+                              isCompleted
+                                ? "border-success/25 bg-success/[0.05]"
+                                : isCurrent
+                                ? "border-accent/45 bg-accent/[0.05]"
+                                : "border-line bg-surface",
+                              isLocked && "opacity-60",
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div
+                                  className={cn(
+                                    "flex size-7 shrink-0 items-center justify-center rounded-md font-data text-caption font-semibold",
+                                    isCompleted
+                                      ? "bg-success/15 text-success-text"
+                                      : isCurrent
+                                      ? "bg-accent text-accent-fg"
+                                      : "bg-surface-active text-fg-subtle",
                                   )}
+                                >
+                                  {isCompleted ? <Check className="size-4" /> : idx + 1}
                                 </div>
-                                <p className="text-[11px] text-zinc-400 truncate">
-                                  {isCompleted
-                                    ? "Verified by Work.ink API ✓"
-                                    : isWorkink
-                                    ? workinkOpenedCpId === cp.id
-                                      ? "Task in progress. Complete on Work.ink to unlock automatically..."
-                                      : "Complete Work.ink task (No timer required)"
-                                    : isCurrent && timerRunning
-                                    ? `Wait ${currentTimer}s on the destination task page...`
-                                    : `Visit task and spend ${cp.duration_seconds}s.`}
-                                </p>
+
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <h4
+                                      className={cn(
+                                        "truncate text-body-sm font-semibold",
+                                        isCompleted ? "text-success-text" : isCurrent ? "text-fg" : "text-fg-muted",
+                                      )}
+                                    >
+                                      {cp.title}
+                                    </h4>
+                                    {isWorkink && (
+                                      <Badge>
+                                        <WorkinkLogo className="h-3.5 w-3.5 flex-shrink-0" />
+                                        Work.ink
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="truncate text-caption text-fg-subtle">
+                                    {isCompleted
+                                      ? "Verified by Work.ink API ✓"
+                                      : isWorkink
+                                      ? workinkOpenedCpId === cp.id
+                                        ? "Task in progress. Complete on Work.ink to unlock automatically..."
+                                        : "Complete Work.ink task (No timer required)"
+                                      : isCurrent && timerRunning
+                                      ? `Wait ${currentTimer}s on the destination task page...`
+                                      : `Visit task and spend ${cp.duration_seconds}s.`}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="shrink-0">
+                                {isCompleted ? (
+                                  <Badge tone="success">
+                                    <CheckCircle2 className="size-3" />
+                                    Done
+                                  </Badge>
+                                ) : isCurrent ? (
+                                  workinkVerifying || verifyingStep ? (
+                                    <Badge tone="accent" className="h-7 px-2.5">
+                                      <RefreshCw className="size-3 animate-spin motion-reduce:animate-none" />
+                                      Verifying
+                                    </Badge>
+                                  ) : isWorkink ? (
+                                    workinkOpenedCpId === cp.id ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <Button
+                                          variant="secondary"
+                                          size="xs"
+                                          onClick={() => handleStartCheckpoint(cp, idx)}
+                                          title="Reopen link"
+                                        >
+                                          <ExternalLink />
+                                          <span>Reopen</span>
+                                        </Button>
+                                        <Badge tone="accent" className="motion-safe:animate-pulse">
+                                          <WorkinkLogo className="h-3 w-3 flex-shrink-0" />
+                                          Awaiting task
+                                        </Badge>
+                                      </div>
+                                    ) : (
+                                      <Button variant="primary" size="sm" onClick={() => handleStartCheckpoint(cp, idx)}>
+                                        <WorkinkLogo className="h-3.5 w-3.5 flex-shrink-0" />
+                                        <span>Go to Work.ink</span>
+                                      </Button>
+                                    )
+                                  ) : timerRunning ? (
+                                    <Badge mono className="h-7 px-2.5 text-caption">
+                                      <Clock className="size-3.5 text-fg-subtle" />
+                                      {currentTimer}s
+                                    </Badge>
+                                  ) : currentStepToken ? (
+                                    <Button variant="primary" size="sm" onClick={() => handleVerifyCurrentStep()}>
+                                      <Check />
+                                      <span>Verify task</span>
+                                    </Button>
+                                  ) : (
+                                    <Button variant="primary" size="sm" onClick={() => handleStartCheckpoint(cp, idx)}>
+                                      <span>Visit task</span>
+                                      <ExternalLink />
+                                    </Button>
+                                  )
+                                ) : (
+                                  <span className="flex items-center gap-1 text-caption text-fg-disabled">
+                                    <Lock className="size-3" />
+                                    Locked
+                                  </span>
+                                )}
                               </div>
                             </div>
 
-                            <div>
-                              {isCompleted ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[11px]">
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
-                                  <span>Done</span>
-                                </span>
-                              ) : isCurrent ? (
-                                workinkVerifying || verifyingStep ? (
-                                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-obsidian-750 border border-obsidian-600 text-zinc-200 text-xs font-mono">
-                                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-400" />
-                                    <span>Verifying API...</span>
-                                  </div>
-                                ) : isWorkink ? (
-                                  workinkOpenedCpId === cp.id ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleStartCheckpoint(cp, idx)}
-                                        className="px-2 py-1 rounded-lg bg-obsidian-750 hover:bg-obsidian-700 text-zinc-300 font-medium text-[11px] transition-all flex items-center gap-1 border border-obsidian-600"
-                                        title="Reopen link"
-                                      >
-                                        <ExternalLink className="w-3 h-3" />
-                                        <span>Reopen</span>
-                                      </button>
-                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-mono animate-pulse">
-                                        <WorkinkLogo className="w-3 h-3 flex-shrink-0" />
-                                        <span>Awaiting Task...</span>
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleStartCheckpoint(cp, idx)}
-                                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-md active:scale-95"
-                                    >
-                                      <WorkinkLogo className="w-3.5 h-3.5 flex-shrink-0" />
-                                      <span>Go to Work.ink</span>
-                                    </button>
-                                  )
-                                ) : timerRunning ? (
-                                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-obsidian-750 border border-obsidian-600 text-zinc-200 text-xs font-mono">
-                                    <Clock className="w-3.5 h-3.5 animate-spin text-zinc-400" />
-                                    <span>{currentTimer}s</span>
-                                  </div>
-                                ) : currentStepToken ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleVerifyCurrentStep()}
-                                    className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>Verify Task</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartCheckpoint(cp, idx)}
-                                    className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-zinc-200 text-black font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
-                                  >
-                                    <span>Visit Task</span>
-                                    <ExternalLink className="w-3 h-3" />
-                                  </button>
-                                )
-                              ) : (
-                                <span className="text-[11px] text-zinc-600 font-mono">
-                                  Locked
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {!isWorkink && isCurrent && timerRunning && currentTimer !== null && (
-                            <div className="mt-3 w-full bg-obsidian-750 rounded-full h-1 overflow-hidden">
-                              <div
-                                className="bg-white h-1 transition-all duration-1000"
-                                style={{
-                                  width: `${
-                                    ((cp.duration_seconds - currentTimer) /
-                                      cp.duration_seconds) *
-                                    100
-                                  }%`,
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            {!isWorkink && isCurrent && timerRunning && currentTimer !== null && (
+                              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-line">
+                                <div
+                                  className="h-1 bg-accent transition-all duration-1000"
+                                  style={{
+                                    width: `${
+                                      ((cp.duration_seconds - currentTimer) /
+                                        cp.duration_seconds) *
+                                      100
+                                    }%`,
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ol>
                   </div>
                 )}
 
@@ -1461,12 +1454,12 @@ export default function ClaimKeyPage() {
                 {claimMethod === "checkpoints" ? (
                   allCheckpointsDone && claimToken ? (
                     /* Interactive Slide-to-Claim to prevent automated headless bypass bots */
-                    <div className="space-y-2 pt-2 animate-in fade-in">
-                      <div className="flex items-center justify-between text-xs text-zinc-400 font-mono px-1">
-                        <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> All tasks completed!
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between gap-2 px-0.5 text-body-sm">
+                        <span className="flex items-center gap-1.5 font-medium text-success-text">
+                          <CheckCircle2 className="size-3.5" /> All tasks completed
                         </span>
-                        <span className="text-zinc-300">Drag human slider to unlock key</span>
+                        <span className="text-caption text-fg-subtle">Drag the slider to unlock your key</span>
                       </div>
                       <SlideToClaim
                         onComplete={handleClaimKey}
@@ -1475,32 +1468,33 @@ export default function ClaimKeyPage() {
                       />
                     </div>
                   ) : (
-                    <div className="p-4 rounded-xl bg-obsidian-800 border border-obsidian-700 text-center space-y-1.5">
-                      <div className="flex items-center justify-center gap-2 text-xs font-semibold text-zinc-400">
-                        <Lock className="w-3.5 h-3.5 text-zinc-500" />
-                        <span>Human Slider Locked</span>
+                    <Card variant="inset" className="space-y-1 p-4 text-center">
+                      <div className="flex items-center justify-center gap-2 text-body-sm font-medium text-fg-muted">
+                        <Lock className="size-3.5 text-fg-subtle" />
+                        <span>Slider locked</span>
                       </div>
-                      <p className="text-[11px] text-zinc-500">
-                        Complete all checkpoint task(s) above to unlock the human slider and claim your license key.
+                      <p className="text-caption text-fg-subtle">
+                        Complete the checkpoint tasks above to unlock the slider and claim your key.
                       </p>
-                    </div>
+                    </Card>
                   )
                 ) : (
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
+                    size="lg"
                     onClick={handleClaimKey}
                     disabled={loading || !discordJoined || !discordUsername.trim()}
-                    className="w-full py-3 rounded-xl bg-white hover:bg-zinc-200 text-black font-bold text-xs transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+                    className="w-full"
                   >
                     {loading ? (
                       <span>Allocating key from pool...</span>
                     ) : (
                       <>
-                        <span>Generate License Key</span>
-                        <ArrowRight className="w-4 h-4" />
+                        <span>Generate license key</span>
+                        <ArrowRight />
                       </>
                     )}
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -1508,104 +1502,95 @@ export default function ClaimKeyPage() {
             {/* STAGE 2: CLAIMED */}
             {step === "claimed" && claimedKey && (
               <div className="space-y-4">
-                <div
-                  className={`p-4 rounded-xl border text-center ${
-                    alreadyClaimed
-                      ? "bg-amber-500/5 border-amber-500/20"
-                      : "bg-emerald-500/5 border-emerald-500/20"
-                  }`}
+                <Alert
+                  tone={alreadyClaimed ? "warning" : "success"}
+                  role="status"
+                  icon={alreadyClaimed ? <Key /> : <ShieldCheck />}
+                  title={alreadyClaimed ? "You already have a key" : "License key generated"}
                 >
-                  {alreadyClaimed ? (
-                    <Key className="w-7 h-7 text-amber-400 mx-auto mb-2" />
-                  ) : (
-                    <ShieldCheck className="w-7 h-7 text-emerald-400 mx-auto mb-2" />
-                  )}
-                  <h3 className="text-sm font-bold text-white">
-                    {alreadyClaimed ? "Existing Key Allocated" : "License Key Generated"}
-                  </h3>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    {alreadyClaimed
-                      ? "Your IP already has an active key. Copy and paste it into your script."
-                      : "Your key has been allocated and cryptographically bound to your IP."}
-                  </p>
-                </div>
+                  {alreadyClaimed
+                    ? "Your IP already has an active key. Copy it into your script."
+                    : "Your key has been allocated and cryptographically bound to your IP."}
+                </Alert>
 
-                {/* Key Display Card */}
-                <div className="p-3.5 rounded-xl bg-obsidian-850 border border-obsidian-700 flex items-center justify-between gap-3">
-                  <div className="font-mono text-xs font-bold text-white tracking-wider truncate select-all">
+                {/* Key Display */}
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-line-strong bg-canvas py-2 pl-3.5 pr-2">
+                  <div className="select-all truncate font-data text-body font-semibold tracking-wide text-fg">
                     {claimedKey}
                   </div>
-                  <button
-                    type="button"
-                    onClick={copyKey}
-                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-xs transition-all flex items-center gap-1.5 shrink-0"
-                  >
+                  <Button variant="primary" size="sm" onClick={copyKey} aria-live="polite">
                     {copied ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <Check />
                         <span>Copied</span>
                       </>
                     ) : (
                       <>
-                        <Copy className="w-3.5 h-3.5" />
+                        <Copy />
                         <span>Copy</span>
                       </>
                     )}
-                  </button>
+                  </Button>
                 </div>
 
                 {/* Key Metadata */}
-                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                  <div className="p-2.5 rounded-lg bg-obsidian-850 border border-obsidian-800">
-                    <span className="text-zinc-500 block">Bound IP:</span>
-                    <span className="text-zinc-300 font-bold truncate block">{boundIp || "Your Network"}</span>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-obsidian-850 border border-obsidian-800">
-                    <span className="text-zinc-500 block">Status:</span>
-                    <span className="text-emerald-400 font-bold block">Active</span>
-                  </div>
-                </div>
+                <dl className="grid grid-cols-2 gap-2">
+                  <Card variant="inset" className="px-3 py-2.5">
+                    <dt className="text-caption text-fg-subtle">Bound IP</dt>
+                    <dd className="truncate font-data text-body-sm text-fg">{boundIp || "Your network"}</dd>
+                  </Card>
+                  <Card variant="inset" className="px-3 py-2.5">
+                    <dt className="text-caption text-fg-subtle">Status</dt>
+                    <dd className="mt-0.5">
+                      <Badge tone="success" dot>
+                        Active
+                      </Badge>
+                    </dd>
+                  </Card>
+                </dl>
 
                 {/* Dynamic IP Reset Self-Service */}
-                <div className="pt-2 border-t border-obsidian-800">
-                  <button
-                    type="button"
+                <div className="border-t border-line pt-4">
+                  <Button
+                    variant="secondary"
+                    size="md"
                     onClick={handleResetIp}
                     disabled={ipResetting}
-                    className="w-full py-2 rounded-xl bg-obsidian-850 hover:bg-obsidian-800 border border-obsidian-750 text-zinc-300 hover:text-white text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${ipResetting ? "animate-spin" : ""}`} />
-                    <span>{ipResetting ? "Rebinding IP..." : "Reset Bound IP to Current Location"}</span>
-                  </button>
+                    <RefreshCw className={ipResetting ? "animate-spin motion-reduce:animate-none" : undefined} />
+                    <span>{ipResetting ? "Rebinding IP..." : "Reset bound IP to current location"}</span>
+                  </Button>
 
                   {ipResetStatus && (
-                    <div
-                      className={`mt-2 p-2.5 rounded-lg text-xs font-mono ${
-                        ipResetStatus.type === "success"
-                          ? "bg-emerald-950/40 border border-emerald-500/30 text-emerald-300"
-                          : "bg-rose-950/40 border border-rose-500/30 text-rose-300"
-                      }`}
+                    <Alert
+                      tone={ipResetStatus.type === "success" ? "success" : "danger"}
+                      icon={ipResetStatus.type === "success" ? <CheckCircle2 /> : <AlertCircle />}
+                      className="mt-2"
                     >
                       {ipResetStatus.message}
-                    </div>
+                    </Alert>
                   )}
                 </div>
 
-                {/* Discord Help Button */}
-                <div className="text-center pt-2">
+                {/* Discord Help */}
+                <div className="pt-1 text-center">
                   <a
                     href={discordInvite}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors underline font-medium"
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-sm text-body-sm text-accent-text underline-offset-2 hover:underline",
+                      focusRing,
+                    )}
                   >
                     <span>Need help with your key? Join Discord</span>
-                    <ExternalLink className="w-3 h-3" />
+                    <ExternalLink className="size-3" />
                   </a>
                 </div>
               </div>
             )}
-          </div>
+          </Card>
         </div>
       </main>
     </div>

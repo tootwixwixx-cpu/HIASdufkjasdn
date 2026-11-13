@@ -33,6 +33,7 @@ import {
   Layers,
   Sparkles,
 } from "lucide-react";
+import { Badge, Button, Select, Input, Tabs, TabsList, TabsTrigger, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui";
 import type { ExecutionLog, ClientErrorLog } from "@/lib/store";
 import WorldMapTelemetry, { ActivePlayerSession } from "@/components/WorldMapTelemetry";
 
@@ -50,14 +51,14 @@ function RobloxAvatar({
 
   const sizeClass =
     size === "sm"
-      ? "w-7 h-7 rounded-lg text-[10px]"
+      ? "w-7 h-7 rounded-lg text-micro"
       : size === "lg"
-      ? "w-12 h-12 rounded-2xl text-sm"
-      : "w-9 h-9 rounded-xl text-xs";
+      ? "w-12 h-12 rounded-lg text-body-sm"
+      : "w-9 h-9 rounded-lg text-caption";
 
   if (userId && !imgError) {
     return (
-      <div className={`${sizeClass} overflow-hidden bg-[#0A0C13] border border-zinc-800 shrink-0 relative shadow-inner flex items-center justify-center`}>
+      <div className={`${sizeClass} overflow-hidden bg-surface border border-line shrink-0 relative flex items-center justify-center`}>
         <img
           src={`/api/roblox/avatar?userId=${userId}`}
           alt={username || "Roblox Avatar"}
@@ -72,7 +73,7 @@ function RobloxAvatar({
 
   return (
     <div
-      className={`${sizeClass} bg-gradient-to-br from-cyan-950 via-zinc-900 to-black border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-400 shrink-0 shadow-inner font-mono`}
+      className={`${sizeClass} bg-accent hover:bg-accent-hover to-black border border-accent/30 flex items-center justify-center font-bold text-accent-text shrink-0 font-data`}
     >
       {initials}
     </div>
@@ -342,184 +343,143 @@ export default function AnalyticsPage() {
   const timeline = data?.timeline || [];
   const maxTimelineTotal = Math.max(1, ...timeline.map((t) => t.total));
 
+  const kpis = [
+    {
+      label: "Total runs",
+      value: formatCompactNumber(total),
+      title: total.toLocaleString(),
+      meta: timeframe === "day" ? "Past 24 hours" : timeframe === "week" ? "Past 7 days" : "Recorded total",
+      icon: Activity,
+      valueClass: "text-fg",
+    },
+    {
+      label: "Passed auth",
+      value: formatCompactNumber(passed),
+      title: passed.toLocaleString(),
+      meta: `${passRate}% success rate`,
+      icon: CheckCircle2,
+      valueClass: "text-success-text",
+    },
+    {
+      label: "Rejected auth",
+      value: formatCompactNumber(failed),
+      title: failed.toLocaleString(),
+      meta: `${total > 0 ? Math.round((failed / total) * 100) : 0}% rejection rate`,
+      icon: XCircle,
+      valueClass: "text-danger-text",
+    },
+    {
+      label: "Unique players",
+      value: formatCompactNumber(uniqueUsers),
+      title: uniqueUsers.toLocaleString(),
+      meta: `${formatCompactNumber(uniqueIps)} distinct IPs`,
+      icon: Users,
+      valueClass: "text-fg",
+    },
+    {
+      label: "Live now",
+      value: formatCompactNumber(activeSessions.filter((s) => s.status === "active").length),
+      title: undefined,
+      meta: "In-game concurrents",
+      icon: Zap,
+      valueClass: "text-fg",
+    },
+    {
+      label: "Avg session",
+      value: formatDuration(data?.avgSessionDurationSec || 0),
+      title: undefined,
+      meta: "Player active time",
+      icon: Clock,
+      valueClass: "text-fg",
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Fitted Top Header Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shadow-sm">
-              <BarChart3 className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white tracking-tight font-mono flex items-center gap-2">
-                Live Execution Radar & Telemetry Engine
-                <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700/60 font-mono">
-                  {total} Executions
-                </span>
-              </h1>
-              <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                Real-time tracking of script executions, global player locations, executor market share, and security funnels.
-              </p>
-            </div>
-          </div>
+    <div className="space-y-4">
+      {/* Page header */}
+      <div className="flex flex-col justify-between gap-3 border-b border-line pb-3 lg:flex-row lg:items-end">
+        <div className="min-w-0">
+          <h1 className="flex items-center gap-2 text-heading font-semibold text-fg">
+            Execution analytics
+            <Badge mono>{total} runs</Badge>
+          </h1>
+          <p className="mt-0.5 text-body-sm text-fg-muted">
+            Script executions, player locations, executor share and auth outcomes, updated live.
+          </p>
         </div>
 
-        {/* Filter Controls Bar */}
-        <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-          {/* Target Script Dropdown */}
-          <div className="flex items-center gap-1.5 bg-[#0D1017] border border-zinc-800 px-3 py-1.5 rounded-xl shadow-sm">
-            <FileCode className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <select
-              value={selectedScript}
-              onChange={(e) => setSelectedScript(e.target.value)}
-              className="bg-transparent text-zinc-200 text-xs font-medium focus:outline-none cursor-pointer"
-            >
-              <option value="all" className="bg-[#0D1017]">All Scripts</option>
-              {scriptsList.map((s) => (
-                <option key={s.id} value={s.id} className="bg-[#0D1017]">
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Timeframe Filter Pills */}
-          <div className="flex items-center bg-[#0D1017] border border-zinc-800 p-0.5 rounded-xl">
-            {[
-              { id: "day", label: "24h" },
-              { id: "week", label: "7d" },
-              { id: "month", label: "30d" },
-              { id: "year", label: "1y" },
-              { id: "all", label: "All" },
-            ].map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTimeframe(t.id as any)}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                  timeframe === t.id
-                    ? "bg-cyan-500 text-black font-bold shadow-sm"
-                    : "text-zinc-400 hover:text-white"
-                }`}
-              >
-                {t.label}
-              </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            size="sm"
+            value={selectedScript}
+            onChange={(e) => setSelectedScript(e.target.value)}
+            aria-label="Script"
+            wrapperClassName="w-44"
+          >
+            <option value="all">All scripts</option>
+            {scriptsList.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
             ))}
-          </div>
+          </Select>
 
-          {/* Live Auto-Refresh Pulse Button */}
-          <button
-            type="button"
+          <Tabs variant="segmented" value={timeframe} onValueChange={(v) => setTimeframe(v as any)}>
+            <TabsList>
+              {[
+                { id: "day", label: "24h" },
+                { id: "week", label: "7d" },
+                { id: "month", label: "30d" },
+                { id: "year", label: "1y" },
+                { id: "all", label: "All" },
+              ].map((t) => (
+                <TabsTrigger key={t.id} value={t.id} className="font-data">
+                  {t.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+
+          <Button
+            size="sm"
             onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
-              autoRefresh
-                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shadow-sm shadow-emerald-500/10"
-                : "bg-zinc-900 text-zinc-400 border-zinc-800"
-            }`}
-            title="Toggle Live Telemetry Auto-Refresh (every 5s)"
+            title="Toggle live auto-refresh (every 5s)"
+            aria-pressed={autoRefresh}
           >
-            <Radio className={`w-3.5 h-3.5 ${autoRefresh ? "animate-pulse text-emerald-400" : ""}`} />
-            <span>{autoRefresh ? "Live 5s" : "Paused"}</span>
-          </button>
+            <span aria-hidden className={`size-1.5 rounded-full ${autoRefresh ? "bg-success" : "bg-fg-subtle"}`} />
+            {autoRefresh ? "Live, 5s" : "Paused"}
+          </Button>
 
-          {/* Manual Refresh */}
-          <button
-            type="button"
-            onClick={() => fetchAnalytics()}
-            className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 transition-colors shadow-sm"
-            title="Refresh now"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-cyan-400" : ""}`} />
-          </button>
+          <Button size="sm" iconOnly onClick={() => fetchAnalytics()} title="Refresh now" aria-label="Refresh now">
+            <RefreshCw className={loading ? "animate-spin" : ""} />
+          </Button>
         </div>
       </div>
 
       {notice && (
-        <div className="p-3 bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 rounded-xl text-xs font-mono flex items-center gap-2 animate-fadeIn">
-          <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+        <div className="flex items-center gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-body-sm text-accent-text">
+          <CheckCircle2 className="size-4" />
           <span>{notice}</span>
         </div>
       )}
 
-      {/* 6 Fitted KPI Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        {/* Total Executions */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl shadow-sm relative overflow-hidden font-mono">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Total Runs</span>
-            <Activity className="w-4 h-4 text-cyan-400" />
-          </div>
-          <p className="text-2xl font-bold text-white mt-1.5" title={total.toLocaleString()}>{formatCompactNumber(total)}</p>
-          <span className="text-[10px] text-zinc-500 mt-1 block">
-            {timeframe === "day" ? "Past 24 hours" : timeframe === "week" ? "Past 7 days" : "Recorded total"}
-          </span>
-        </div>
-
-        {/* Passed Auth */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl shadow-sm relative overflow-hidden font-mono">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Passed Auth</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          </div>
-          <p className="text-2xl font-bold text-emerald-400 mt-1.5" title={passed.toLocaleString()}>{formatCompactNumber(passed)}</p>
-          <span className="text-[10px] text-emerald-400/90 mt-1 block font-semibold">
-            {passRate}% Success Rate
-          </span>
-        </div>
-
-        {/* Failed Auth */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl shadow-sm relative overflow-hidden font-mono">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">Rejected Auth</span>
-            <XCircle className="w-4 h-4 text-rose-400" />
-          </div>
-          <p className="text-2xl font-bold text-rose-400 mt-1.5" title={failed.toLocaleString()}>{formatCompactNumber(failed)}</p>
-          <span className="text-[10px] text-rose-400/90 mt-1 block">
-            {total > 0 ? Math.round((failed / total) * 100) : 0}% Rejection Rate
-          </span>
-        </div>
-
-        {/* Unique Players */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl shadow-sm relative overflow-hidden font-mono">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Unique Players</span>
-            <Users className="w-4 h-4 text-purple-400" />
-          </div>
-          <p className="text-2xl font-bold text-purple-300 mt-1.5" title={uniqueUsers.toLocaleString()}>{formatCompactNumber(uniqueUsers)}</p>
-          <span className="text-[10px] text-zinc-400 mt-1 block" title={`${uniqueIps.toLocaleString()} Distinct IPs`}>
-            {formatCompactNumber(uniqueIps)} Distinct IPs
-          </span>
-        </div>
-
-        {/* Online Active Sessions */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl shadow-sm relative overflow-hidden font-mono">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Active Live</span>
-            <Zap className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="flex items-baseline gap-2 mt-1.5">
-            <p className="text-2xl font-bold text-emerald-300">{formatCompactNumber(activeSessions.filter(s => s.status === "active").length)}</p>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          </div>
-          <span className="text-[10px] text-zinc-500 mt-1 block">
-            In-game concurrents
-          </span>
-        </div>
-
-        {/* Average Session Duration */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl shadow-sm relative overflow-hidden font-mono">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Avg Session</span>
-            <Clock className="w-4 h-4 text-amber-400" />
-          </div>
-          <p className="text-2xl font-bold text-amber-300 mt-1.5">
-            {formatDuration(data?.avgSessionDurationSec || 0)}
-          </p>
-          <span className="text-[10px] text-zinc-500 mt-1 block">
-            Player active time
-          </span>
-        </div>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line md:grid-cols-3 lg:grid-cols-6 [&>*]:bg-surface-raised">
+        {kpis.map((kpi) => {
+          const Icon = kpi.icon;
+          return (
+            <div key={kpi.label} className="px-4 py-3">
+              <div className="flex items-center justify-between text-caption text-fg-subtle">
+                <span>{kpi.label}</span>
+                <Icon aria-hidden className="size-3.5" />
+              </div>
+              <p className={`mt-1 font-data text-[22px] font-semibold leading-7 ${kpi.valueClass}`} title={kpi.title}>
+                {kpi.value}
+              </p>
+              <span className="mt-0.5 block truncate text-caption text-fg-subtle">{kpi.meta}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* REAL Interactive Global Radar World Map */}
@@ -527,25 +487,25 @@ export default function AnalyticsPage() {
 
       {/* Activity Timeline Bar Chart */}
       {timeline.length > 0 && (
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-5 rounded-2xl shadow-xl space-y-4 font-mono">
+        <div className="bg-surface border border-line p-4 rounded-lg space-y-4 font-data">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-cyan-400" />
+              <h2 className="text-body-sm font-bold text-fg flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-accent-text" />
                 Hourly Execution Volume & Pass Rate
               </h2>
-              <p className="text-xs text-zinc-400">
+              <p className="text-caption text-fg-muted">
                 Hourly throughput across authentication servers. Cyan represents authorized executions, red represents security rejections.
               </p>
             </div>
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-4 text-caption">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-cyan-500 inline-block" />
-                <span className="text-zinc-300">Passed</span>
+                <span className="w-2.5 h-2.5 rounded-sm bg-accent inline-block" />
+                <span className="text-fg">Passed</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" />
-                <span className="text-zinc-300">Rejected</span>
+                <span className="w-2.5 h-2.5 rounded-sm bg-danger inline-block" />
+                <span className="text-fg">Rejected</span>
               </div>
             </div>
           </div>
@@ -559,11 +519,11 @@ export default function AnalyticsPage() {
                 return (
                   <div key={point.key} className="flex-1 flex flex-col items-center h-full justify-end group relative">
                     {/* Hover Floating Tooltip */}
-                    <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center bg-[#080A0F] border border-zinc-700 p-2 rounded-xl text-[10px] text-white whitespace-nowrap shadow-xl z-20 pointer-events-none">
-                      <span className="font-bold text-cyan-400">{point.label}</span>
+                    <div className="absolute bottom-full mb-2 hidden group-hover:flex flex-col items-center bg-canvas border border-line-strong p-2 rounded-lg text-micro text-fg whitespace-nowrap z-20 pointer-events-none">
+                      <span className="font-bold text-accent-text">{point.label}</span>
                       <span>Total: {point.total}</span>
-                      <span className="text-emerald-400">Passed: {point.passed}</span>
-                      <span className="text-rose-400">Rejected: {point.failed}</span>
+                      <span className="text-success-text">Passed: {point.passed}</span>
+                      <span className="text-danger-text">Rejected: {point.failed}</span>
                     </div>
 
                     {/* Stacked Vertical Bar */}
@@ -571,18 +531,18 @@ export default function AnalyticsPage() {
                       {point.failed > 0 && (
                         <div
                           style={{ height: `${failedHeight}%` }}
-                          className="w-full bg-rose-500/80 rounded-t-sm transition-all group-hover:bg-rose-400"
+                          className="w-full bg-danger/80 rounded-t-sm transition-all group-hover:bg-danger-solid-hover"
                         />
                       )}
                       <div
                         style={{ height: `${passedHeight}%` }}
-                        className={`w-full bg-cyan-500 transition-all group-hover:bg-cyan-400 ${
+                        className={`w-full bg-accent transition-all group-hover:bg-accent-hover ${
                           point.failed > 0 ? "" : "rounded-t-sm"
                         }`}
                       />
                     </div>
 
-                    <span className="text-[9px] text-zinc-500 font-mono mt-1.5 truncate max-w-[34px]">
+                    <span className="text-micro text-fg-subtle font-data mt-1.5 truncate max-w-[34px]">
                       {point.label}
                     </span>
                   </div>
@@ -594,42 +554,42 @@ export default function AnalyticsPage() {
       )}
 
       {/* Fitted Breakdowns Grid (3 Columns) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 font-mono">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 font-data">
         {/* Top Roblox Games */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl space-y-3">
-          <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Gamepad2 className="w-4 h-4 text-purple-400" />
+        <div className="bg-surface border border-line p-4 rounded-lg space-y-3">
+          <h2 className="text-caption font-bold text-fg flex items-center gap-2">
+            <Gamepad2 className="w-4 h-4 text-accent-text" />
             Top Roblox Games
           </h2>
 
           {!data?.topGames || data.topGames.length === 0 ? (
-            <p className="text-xs text-zinc-500 py-4">No Roblox game telemetry tracked yet.</p>
+            <p className="text-caption text-fg-subtle py-4">No Roblox game telemetry tracked yet.</p>
           ) : (
             <div className="space-y-2.5">
               {data.topGames.map((g) => {
                 return (
                   <div key={g.place_id} className="space-y-1">
-                    <div className="flex justify-between text-xs">
+                    <div className="flex justify-between text-caption">
                       <div className="truncate max-w-[180px]">
-                        <span className="text-zinc-200 font-semibold block truncate" title={g.place_name}>
+                        <span className="text-fg font-semibold block truncate" title={g.place_name}>
                           {g.place_name}
                         </span>
                         <a
                           href={`https://www.roblox.com/games/${g.place_id}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-[10px] text-purple-400 hover:underline flex items-center gap-1"
+                          className="text-micro text-accent-text hover:underline flex items-center gap-1"
                         >
                           <span>Place #{g.place_id}</span>
                           <Compass className="w-2.5 h-2.5" />
                         </a>
                       </div>
-                      <span className="text-zinc-400 shrink-0 text-[11px] whitespace-nowrap font-mono">
+                      <span className="text-fg-muted shrink-0 text-micro whitespace-nowrap font-data">
                         {formatCompactNumber(g.count)} ({g.percentage}%)
                       </span>
                     </div>
-                    <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-zinc-800">
-                      <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: `${g.percentage}%` }} />
+                    <div className="w-full bg-surface h-1.5 rounded-full overflow-hidden border border-line">
+                      <div className="bg-accent h-1.5 rounded-full" style={{ width: `${g.percentage}%` }} />
                     </div>
                   </div>
                 );
@@ -639,14 +599,14 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Top Executors Detected */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl space-y-3">
-          <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Laptop className="w-4 h-4 text-cyan-400" />
+        <div className="bg-surface border border-line p-4 rounded-lg space-y-3">
+          <h2 className="text-caption font-bold text-fg flex items-center gap-2">
+            <Laptop className="w-4 h-4 text-accent-text" />
             Roblox Executors Detected
           </h2>
 
           {Object.keys(data?.executors || {}).length === 0 ? (
-            <p className="text-xs text-zinc-500 py-4">No executor data logged yet.</p>
+            <p className="text-caption text-fg-subtle py-4">No executor data logged yet.</p>
           ) : (
             <div className="space-y-2.5">
               {Object.entries(data?.executors || {})
@@ -655,12 +615,12 @@ export default function AnalyticsPage() {
                   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
                   return (
                     <div key={exec} className="space-y-1">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-zinc-200 font-semibold truncate pr-2" title={exec}>{exec}</span>
-                        <span className="text-zinc-400 text-[11px] whitespace-nowrap font-mono">{formatCompactNumber(count)} ({pct}%)</span>
+                      <div className="flex justify-between items-center text-caption">
+                        <span className="text-fg font-semibold truncate pr-2" title={exec}>{exec}</span>
+                        <span className="text-fg-muted text-micro whitespace-nowrap font-data">{formatCompactNumber(count)} ({pct}%)</span>
                       </div>
-                      <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-zinc-800">
-                        <div className="bg-cyan-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                      <div className="w-full bg-surface h-1.5 rounded-full overflow-hidden border border-line">
+                        <div className="bg-accent h-1.5 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -670,14 +630,14 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Operating Systems & Devices */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl space-y-3">
-          <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Compass className="w-4 h-4 text-emerald-400" />
+        <div className="bg-surface border border-line p-4 rounded-lg space-y-3">
+          <h2 className="text-caption font-bold text-fg flex items-center gap-2">
+            <Compass className="w-4 h-4 text-success-text" />
             Device Operating Systems
           </h2>
 
           {Object.keys(data?.operatingSystems || {}).length === 0 ? (
-            <p className="text-xs text-zinc-500 py-4">No OS telemetry logged yet.</p>
+            <p className="text-caption text-fg-subtle py-4">No OS telemetry logged yet.</p>
           ) : (
             <div className="space-y-2.5">
               {Object.entries(data?.operatingSystems || {})
@@ -686,12 +646,12 @@ export default function AnalyticsPage() {
                   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
                   return (
                     <div key={os} className="space-y-1">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-zinc-200 font-semibold truncate pr-2" title={os}>{os}</span>
-                        <span className="text-zinc-400 text-[11px] whitespace-nowrap font-mono">{formatCompactNumber(count)} ({pct}%)</span>
+                      <div className="flex justify-between items-center text-caption">
+                        <span className="text-fg font-semibold truncate pr-2" title={os}>{os}</span>
+                        <span className="text-fg-muted text-micro whitespace-nowrap font-data">{formatCompactNumber(count)} ({pct}%)</span>
                       </div>
-                      <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-zinc-800">
-                        <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                      <div className="w-full bg-surface h-1.5 rounded-full overflow-hidden border border-line">
+                        <div className="bg-success h-1.5 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -701,14 +661,14 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Scripts Breakdown */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl space-y-3">
-          <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <FileCode className="w-4 h-4 text-blue-400" />
+        <div className="bg-surface border border-line p-4 rounded-lg space-y-3">
+          <h2 className="text-caption font-bold text-fg flex items-center gap-2">
+            <FileCode className="w-4 h-4 text-accent-text" />
             Top Scripts Executed
           </h2>
 
           {!data?.scriptsBreakdown || Object.keys(data.scriptsBreakdown).length === 0 ? (
-            <p className="text-xs text-zinc-500 py-4">No script executions logged yet.</p>
+            <p className="text-caption text-fg-subtle py-4">No script executions logged yet.</p>
           ) : (
             <div className="space-y-2.5">
               {Object.entries(data.scriptsBreakdown)
@@ -717,12 +677,12 @@ export default function AnalyticsPage() {
                   const pct = total > 0 ? Math.round((stats.total / total) * 100) : 0;
                   return (
                     <div key={sName} className="space-y-1">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-zinc-200 font-semibold truncate pr-2" title={sName}>{sName}</span>
-                        <span className="text-zinc-400 text-[11px] whitespace-nowrap font-mono">{formatCompactNumber(stats.total)} ({pct}%)</span>
+                      <div className="flex justify-between items-center text-caption">
+                        <span className="text-fg font-semibold truncate pr-2" title={sName}>{sName}</span>
+                        <span className="text-fg-muted text-micro whitespace-nowrap font-data">{formatCompactNumber(stats.total)} ({pct}%)</span>
                       </div>
-                      <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-zinc-800">
-                        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                      <div className="w-full bg-surface h-1.5 rounded-full overflow-hidden border border-line">
+                        <div className="bg-accent h-1.5 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -732,14 +692,14 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Security Rejection Breakdown */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl space-y-3">
-          <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-rose-400" />
+        <div className="bg-surface border border-line p-4 rounded-lg space-y-3">
+          <h2 className="text-caption font-bold text-fg flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-danger-text" />
             Security Rejections Matrix
           </h2>
 
           {Object.keys(data?.failureReasons || {}).length === 0 ? (
-            <p className="text-xs text-zinc-500 py-4">Zero security rejections recorded.</p>
+            <p className="text-caption text-fg-subtle py-4">Zero security rejections recorded.</p>
           ) : (
             <div className="space-y-2.5">
               {Object.entries(data?.failureReasons || {})
@@ -748,12 +708,12 @@ export default function AnalyticsPage() {
                   const pct = failed > 0 ? Math.round((count / failed) * 100) : 0;
                   return (
                     <div key={reason} className="space-y-1">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-zinc-300 truncate pr-2 font-medium" title={reason}>{reason}</span>
-                        <span className="text-zinc-400 text-[11px] whitespace-nowrap font-mono">{formatCompactNumber(count)} ({pct}%)</span>
+                      <div className="flex justify-between items-center text-caption">
+                        <span className="text-fg truncate pr-2 font-medium" title={reason}>{reason}</span>
+                        <span className="text-fg-muted text-micro whitespace-nowrap font-data">{formatCompactNumber(count)} ({pct}%)</span>
                       </div>
-                      <div className="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-zinc-800">
-                        <div className="bg-rose-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${Math.min(100, pct)}%` }} />
+                      <div className="w-full bg-surface h-1.5 rounded-full overflow-hidden border border-line">
+                        <div className="bg-danger h-1.5 rounded-full transition-all duration-300" style={{ width: `${Math.min(100, pct)}%` }} />
                       </div>
                     </div>
                   );
@@ -763,30 +723,30 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Funnel Conversion */}
-        <div className="bg-[#0D1017] border border-zinc-800/80 p-4 rounded-2xl space-y-3">
-          <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-400" />
+        <div className="bg-surface border border-line p-4 rounded-lg space-y-3">
+          <h2 className="text-caption font-bold text-fg flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-warning-text" />
             Checkpoint Conversion Funnel
           </h2>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400">Claims Funnel Conversion:</span>
-              <span className="font-bold text-amber-400">{cpRate}%</span>
+            <div className="flex items-center justify-between text-caption">
+              <span className="text-fg-muted">Claims Funnel Conversion:</span>
+              <span className="font-bold text-warning-text">{cpRate}%</span>
             </div>
-            <div className="w-full h-3 bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 flex">
+            <div className="w-full h-3 bg-surface rounded-lg overflow-hidden border border-line flex">
               <div
                 style={{ width: `${cpRate}%` }}
-                className="bg-emerald-500 h-full transition-all duration-500"
+                className="bg-success h-full transition-all duration-500"
                 title={`Completed: ${cpRate}%`}
               />
               <div
                 style={{ width: `${100 - cpRate}%` }}
-                className="bg-rose-500/80 h-full transition-all duration-500"
+                className="bg-danger/80 h-full transition-all duration-500"
                 title={`Dropped: ${100 - cpRate}%`}
               />
             </div>
-            <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1">
+            <div className="flex items-center justify-between text-micro text-fg-subtle pt-1">
               <span>Completed: {cpCompleted}</span>
               <span>Bounced: {cpDropped}</span>
             </div>
@@ -794,89 +754,62 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Fitted Live Audit Stream & Error Logs Container */}
-      <div className="bg-[#0D1017] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl font-mono">
-        {/* Table Controls & Tabs */}
-        <div className="p-4 border-b border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0A0D14]">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveLogTab("audit")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
-                activeLogTab === "audit"
-                  ? "bg-cyan-500 text-black font-bold shadow-sm"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
-              }`}
-            >
-              <Terminal className="w-3.5 h-3.5" />
-              <span>Live Execution Feed</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-black/30 font-bold">
-                {data?.recentLogs?.length || 0}
-              </span>
-            </button>
+      {/* Live execution feed & client errors */}
+      <div className="overflow-hidden rounded-lg border border-line bg-surface-raised">
+        <div className="flex flex-col justify-between gap-2 border-b border-line px-3 sm:flex-row sm:items-center">
+          <Tabs value={activeLogTab} onValueChange={(v) => setActiveLogTab(v as "audit" | "errors")}>
+            <TabsList className="border-b-0">
+              <TabsTrigger value="audit" count={data?.recentLogs?.length || 0}>
+                <Terminal />
+                Execution feed
+              </TabsTrigger>
+              <TabsTrigger value="errors" count={clientErrors.length > 0 ? clientErrors.length : undefined}>
+                <Bug />
+                Client errors
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-            <button
-              type="button"
-              onClick={() => setActiveLogTab("errors")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 ${
-                activeLogTab === "errors"
-                  ? "bg-rose-600 text-white shadow-sm"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
-              }`}
-            >
-              <Bug className="w-3.5 h-3.5" />
-              <span>Client Error Telemetry</span>
-              {clientErrors.length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-rose-400 text-black font-bold">
-                  {clientErrors.length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder={activeLogTab === "audit" ? "Search user, IP, executor..." : "Search error, player, script..."}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-[#080A0F] border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-cyan-500 w-48 sm:w-64"
-              />
-            </div>
+          <div className="flex items-center gap-1.5 py-2">
+            <Input
+              size="sm"
+              leading={<Search />}
+              placeholder={activeLogTab === "audit" ? "Search user, IP, executor" : "Search error, player, script"}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="Search logs"
+              className="w-48 sm:w-64"
+            />
 
             {activeLogTab === "audit" ? (
               <>
-                <button
-                  type="button"
-                  onClick={handleExportCSV}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 text-xs font-semibold transition-colors"
-                  title="Download Logs as CSV"
-                >
-                  <Download className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>CSV</span>
-                </button>
-                <button
-                  type="button"
+                <Button size="sm" onClick={handleExportCSV} title="Download logs as CSV">
+                  <Download />
+                  CSV
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
                   onClick={handleClearLogs}
-                  className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors"
                   title="Clear all logs"
+                  aria-label="Clear all logs"
+                  className="hover:bg-danger/10 hover:text-danger-text"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                  <Trash2 />
+                </Button>
               </>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleClearClientErrors}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-colors"
                 title="Clear all client runtime errors"
+                className="hover:bg-danger/10 hover:text-danger-text"
               >
-                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                <span>Clear Errors</span>
-              </button>
+                <Trash2 />
+                Clear errors
+              </Button>
             )}
           </div>
         </div>
@@ -884,173 +817,173 @@ export default function AnalyticsPage() {
         {activeLogTab === "audit" ? (
           /* EXECUTION AUDIT LOG TABLE */
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#080A0F] border-b border-zinc-800 text-zinc-400 font-semibold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="p-3.5">Result</th>
-                  <th className="p-3.5">Time</th>
-                  <th className="p-3.5">Script</th>
-                  <th className="p-3.5">Roblox Player</th>
-                  <th className="p-3.5">Executor / OS</th>
-                  <th className="p-3.5">IP & Location</th>
-                  <th className="p-3.5">Key Last 4</th>
-                  <th className="p-3.5">Outcome / Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60 text-[11px]">
+            <Table bare containerClassName="overflow-visible">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Result</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Script</TableHead>
+                  <TableHead>Roblox Player</TableHead>
+                  <TableHead>Executor / OS</TableHead>
+                  <TableHead>IP & Location</TableHead>
+                  <TableHead>Key Last 4</TableHead>
+                  <TableHead>Outcome / Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12 text-zinc-500">
+                  <TableRow>
+                    <TableCell colSpan={8} className="whitespace-normal h-auto text-center py-12 text-fg-subtle">
                       Loading telemetry logs...
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : filteredLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12 text-zinc-500">
+                  <TableRow>
+                    <TableCell colSpan={8} className="whitespace-normal h-auto text-center py-12 text-fg-subtle">
                       No execution events match your filters.
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   filteredLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-zinc-850/30 transition-colors">
-                      <td className="p-3.5">
+                    <TableRow key={log.id}>
+                      <TableCell>
                         {log.status === "success" ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-micro font-bold bg-success/15 text-success-text border border-success/30">
                             Pass
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-micro font-bold bg-danger/15 text-danger-text border border-danger/30">
                             Fail
                           </span>
                         )}
-                      </td>
-                      <td className="p-3.5 text-zinc-400 whitespace-nowrap">
+                      </TableCell>
+                      <TableCell className="text-fg-muted">
                         {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td className="p-3.5">
-                        <span className="text-cyan-300 font-semibold">{log.script_name || "Universal"}</span>
-                      </td>
-                      <td className="p-3.5">
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-accent-text font-semibold">{log.script_name || "Universal"}</span>
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center gap-2">
                           <RobloxAvatar userId={log.roblox_user_id} username={log.roblox_username} size="sm" />
                           <div>
-                            <span className="text-white font-medium">{log.roblox_username || "Unknown"}</span>
+                            <span className="text-fg font-medium">{log.roblox_username || "Unknown"}</span>
                             {log.roblox_user_id && (
-                              <span className="block text-[10px] text-zinc-500">
+                              <span className="block text-micro text-fg-subtle">
                                 ID: {log.roblox_user_id}
                               </span>
                             )}
                           </div>
                         </div>
-                      </td>
-                      <td className="p-3.5 text-zinc-300">
+                      </TableCell>
+                      <TableCell className="text-fg">
                         <span>{log.executor || "Unknown"}</span>
-                        <span className="block text-[10px] text-zinc-500">{log.os}</span>
-                      </td>
-                      <td className="p-3.5">
-                        <span className="text-zinc-300">{log.ip_address}</span>
-                        <span className="block text-[10px] text-zinc-500 truncate max-w-[140px]">
+                        <span className="block text-micro text-fg-subtle">{log.os}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-fg">{log.ip_address}</span>
+                        <span className="block text-micro text-fg-subtle truncate max-w-[140px]">
                           {log.city ? `${log.city}, ${log.country}` : log.isp || "Private Node"}
                         </span>
-                      </td>
-                      <td className="p-3.5 text-zinc-400">
+                      </TableCell>
+                      <TableCell className="text-fg-muted">
                         ****-{log.key_last4 || "NONE"}
-                      </td>
-                      <td className="p-3.5 text-zinc-300">
+                      </TableCell>
+                      <TableCell className="text-fg">
                         {log.status === "success" ? (
-                          <span className="text-emerald-400 font-medium">Authorized & Streamed</span>
+                          <span className="text-success-text font-medium">Authorized & Streamed</span>
                         ) : (
-                          <span className="text-rose-400">{log.failure_reason || "Access Rejected"}</span>
+                          <span className="text-danger-text">{log.failure_reason || "Access Rejected"}</span>
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : (
           /* CLIENT ERRORS DEBUG TABLE */
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#080A0F] border-b border-zinc-800 text-zinc-400 font-semibold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="p-3.5">Error Message</th>
-                  <th className="p-3.5">Player</th>
-                  <th className="p-3.5">Script</th>
-                  <th className="p-3.5">Executor / OS</th>
-                  <th className="p-3.5">Timestamp</th>
-                  <th className="p-3.5 text-right">Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/60 text-[11px]">
+            <Table bare containerClassName="overflow-visible">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Error Message</TableHead>
+                  <TableHead>Player</TableHead>
+                  <TableHead>Script</TableHead>
+                  <TableHead>Executor / OS</TableHead>
+                  <TableHead>Timestamp</TableHead>
+                  <TableHead align="right">Details</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {filteredErrors.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="text-center py-12 text-zinc-500">
+                  <TableRow>
+                    <TableCell colSpan={6} className="whitespace-normal h-auto text-center py-12 text-fg-subtle">
                       Zero client runtime errors reported. Your Luau code is running smoothly!
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   filteredErrors.map((err) => (
                     <React.Fragment key={err.id}>
-                      <tr className="hover:bg-zinc-850/30 transition-colors">
-                        <td className="p-3.5">
-                          <span className="text-rose-400 font-bold block truncate max-w-[320px]">
+                      <TableRow>
+                        <TableCell>
+                          <span className="text-danger-text font-bold block truncate max-w-[320px]">
                             {err.error_message}
                           </span>
-                        </td>
-                        <td className="p-3.5">
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <RobloxAvatar userId={err.roblox_user_id} username={err.roblox_username} size="sm" />
-                            <span className="text-white font-medium">{err.roblox_username || "Unknown"}</span>
+                            <span className="text-fg font-medium">{err.roblox_username || "Unknown"}</span>
                           </div>
-                        </td>
-                        <td className="p-3.5 text-cyan-300 font-medium">{err.script_name || "AtomWare"}</td>
-                        <td className="p-3.5 text-zinc-300">
+                        </TableCell>
+                        <TableCell className="text-accent-text font-medium">{err.script_name || "AtomWare"}</TableCell>
+                        <TableCell className="text-fg">
                           <span>{err.executor}</span>
-                          <span className="block text-[10px] text-zinc-500">{err.os}</span>
-                        </td>
-                        <td className="p-3.5 text-zinc-400">
+                          <span className="block text-micro text-fg-subtle">{err.os}</span>
+                        </TableCell>
+                        <TableCell className="text-fg-muted">
                           {new Date(err.created_at).toLocaleString()}
-                        </td>
-                        <td className="p-3.5 text-right">
+                        </TableCell>
+                        <TableCell align="right">
                           <button
                             type="button"
                             onClick={() => setExpandedErrorId(expandedErrorId === err.id ? null : err.id)}
-                            className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white text-[11px]"
+                            className="px-2.5 py-1 rounded-lg bg-surface border border-line text-fg hover:text-fg text-micro"
                           >
                             {expandedErrorId === err.id ? "Hide Stack" : "View Stack"}
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
 
                       {expandedErrorId === err.id && err.stack_trace && (
-                        <tr>
-                          <td colSpan={6} className="p-4 bg-[#080A0F] border-y border-zinc-800">
+                        <TableRow>
+                          <TableCell colSpan={6} className="whitespace-normal h-auto p-4 bg-canvas border-y border-line">
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
-                                <span className="text-[10px] text-zinc-400 uppercase font-bold">Lua Stack Trace:</span>
+                                <span className="text-micro text-fg-muted font-bold">Lua Stack Trace:</span>
                                 <button
                                   type="button"
                                   onClick={() => handleCopyTrace(err.stack_trace!)}
-                                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white text-[10px]"
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-surface-hover text-fg hover:text-fg text-micro"
                                 >
-                                  {copiedTrace ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                  {copiedTrace ? <Check className="w-3 h-3 text-success-text" /> : <Copy className="w-3 h-3" />}
                                   <span>{copiedTrace ? "Copied" : "Copy Trace"}</span>
                                 </button>
                               </div>
-                              <pre className="p-3 rounded-xl bg-black/60 border border-zinc-800 text-rose-300 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap">
+                              <pre className="p-3 rounded-lg bg-canvas/60 border border-line text-danger-text font-data text-micro overflow-x-auto whitespace-pre-wrap">
                                 {err.stack_trace}
                               </pre>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       )}
                     </React.Fragment>
                   ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>

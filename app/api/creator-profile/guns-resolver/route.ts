@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+// SECURITY: this feature is specifically "resolve a guns.lol profile" — it must never
+// fetch an arbitrary server-side URL from user input (that's an SSRF primitive). Only
+// guns.lol/www.guns.lol hostnames are ever fetched, regardless of what the caller passes.
+const ALLOWED_RESOLVER_HOSTS = new Set(["guns.lol", "www.guns.lol"]);
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -11,11 +16,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Guns.lol username or URL is required." }, { status: 400 });
     }
 
-    // Normalize URL
-    let targetUrl = query;
-    if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-      // Clean username from @ or path
-      const cleanUsername = query.replace(/^@/, "").replace(/^guns\.lol\//, "");
+    // Normalize to a guns.lol URL. If the caller supplied a full URL, it must already
+    // point at guns.lol — otherwise extract a bare username and build the URL ourselves.
+    let targetUrl: string;
+    if (query.startsWith("http://") || query.startsWith("https://")) {
+      let parsed: URL;
+      try {
+        parsed = new URL(query);
+      } catch {
+        return NextResponse.json({ error: "Invalid URL." }, { status: 400 });
+      }
+      if (!ALLOWED_RESOLVER_HOSTS.has(parsed.hostname.toLowerCase())) {
+        return NextResponse.json({ error: "Only guns.lol URLs are supported." }, { status: 400 });
+      }
+      targetUrl = parsed.toString();
+    } else {
+      const cleanUsername = query.replace(/^@/, "").replace(/^guns\.lol\//i, "").replace(/^\/+/, "");
+      if (!/^[a-zA-Z0-9_.-]+$/.test(cleanUsername)) {
+        return NextResponse.json({ error: "Invalid guns.lol username." }, { status: 400 });
+      }
       targetUrl = `https://guns.lol/${cleanUsername}`;
     }
 

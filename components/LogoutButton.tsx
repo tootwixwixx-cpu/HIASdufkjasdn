@@ -3,6 +3,7 @@
 
 import React from "react";
 import { LogOut } from "lucide-react";
+import { Button } from "@/components/ui";
 
 export default function LogoutButton() {
   const handleLogout = async () => {
@@ -15,14 +16,15 @@ export default function LogoutButton() {
   };
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={handleLogout}
-      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors"
+      className="w-full justify-start hover:bg-danger/10 hover:text-danger-text"
       title="Sign out of admin session"
     >
-      <LogOut className="w-4 h-4" />
-      <span>Sign Out</span>
-    </button>
+      <LogOut />
+      <span>Sign out</span>
+    </Button>
   );
 }

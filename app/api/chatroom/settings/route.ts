@@ -1,6 +1,7 @@
 // app/api/chatroom/settings/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
+import { isAuthenticated } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!(await isAuthenticated(req))) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const body = await req.json();
     const rawVal = body.cooldown_seconds !== undefined ? body.cooldown_seconds : body.cooldown;
     const cooldown = Number(rawVal);

@@ -20,8 +20,11 @@ import {
   GitBranch,
   RefreshCw,
   FolderGit2,
+  Shield,
+  Cpu,
 } from "lucide-react";
 import { ScriptRecord } from "@/lib/store";
+import { Modal, Button, Badge, Tabs, TabsList, TabsTrigger } from "@/components/ui";
 
 interface Props {
   script: ScriptRecord | null;
@@ -40,6 +43,7 @@ export default function ScriptUpdateModal({
   const [modulesMap, setModulesMap] = useState<Record<string, string>>({});
   const [originalMap, setOriginalMap] = useState<Record<string, string>>({});
   const [entryFile, setEntryFile] = useState<string>("");
+  const [vmPreset, setVmPreset] = useState<"balanced" | "maximum" | "ultra">("balanced");
   const [activeTab, setActiveTab] = useState<"upload" | "editor" | "github">("upload");
   const [githubRepo, setGithubRepo] = useState("");
   const [githubBranch, setGithubBranch] = useState("main");
@@ -69,6 +73,7 @@ export default function ScriptUpdateModal({
       setModulesMap(mods);
       setOriginalMap(mods);
       setEntryFile(script.entry_file || Object.keys(mods)[0] || "init.lua");
+      setVmPreset((script.vm_preset as any) || "balanced");
 
       const fileKeys = Object.keys(mods);
       if (fileKeys.length > 0) {
@@ -260,6 +265,7 @@ export default function ScriptUpdateModal({
           slug: script.slug,
           entry_file: entryFile,
           modules: modulesMap,
+          preset: vmPreset,
         }),
       });
 
@@ -268,7 +274,7 @@ export default function ScriptUpdateModal({
 
       setOriginalMap({ ...modulesMap });
       setUploadedFileName(null);
-      setSaveSuccess(`Script updated successfully! Loadstring remains unchanged and active.`);
+      setSaveSuccess(`Script updated & re-obfuscated with Luau VM! Loadstring remains locked and active.`);
       onScriptUpdated(data.script);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error saving updates";
@@ -282,78 +288,110 @@ export default function ScriptUpdateModal({
   const byteSize = new Blob([currentContent]).size;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-[#0f1118] border border-gray-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-gray-800/80 bg-[#141722]/60 flex items-center justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <FileCode className="w-5 h-5 text-blue-400 shrink-0" />
-                <span className="truncate">Update Script: {script.name}</span>
-              </h2>
-              <span className="text-[11px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-md">
-                /{script.slug}
-              </span>
-              <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <Lock className="w-3 h-3" /> Loadstring Locked
-              </span>
-            </div>
-            <p className="text-xs text-gray-400">
-              Update files or replace code without resetting the loadstring. Changes apply immediately to all executors.
-            </p>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      size="xl"
+      className="max-w-5xl"
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="truncate">Update script: {script.name}</span>
+          <Badge mono>/{script.slug}</Badge>
+          <Badge tone="success">
+            <Lock className="size-3" /> Loadstring locked
+          </Badge>
+          <Badge tone="accent">
+            <Shield className="size-3" /> Luau VM
+          </Badge>
+        </span>
+      }
+      description="Update files or replace code without resetting the loadstring. Changes apply to every executor immediately."
+      footer={
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-1.5 text-caption text-fg-muted">
+            <Lock className="size-3.5 shrink-0 text-fg-subtle" />
+            <span>
+              Loadstring URL stays the same: <code className="font-data text-fg">/api/loader/{script.slug}</code>
+            </span>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center justify-end gap-2">
+            <Button onClick={onClose} disabled={isSaving}>
+              Close
+            </Button>
+            <Button variant="primary" onClick={handleSave} loading={isSaving}>
+              <Check />
+              Save & deploy update
+            </Button>
+          </div>
         </div>
-
+      }
+    >
         {/* Loadstring info bar */}
-        <div className="px-4 py-2.5 bg-[#090b10] border-b border-gray-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 truncate">
-            <span className="text-gray-400 shrink-0 font-medium">Loadstring:</span>
-            <code className="text-[11px] font-mono text-blue-300 bg-gray-900/90 border border-gray-800 px-2 py-1 rounded truncate select-all">
+        <div className="-mx-5 -mt-4 mb-4 flex flex-col justify-between gap-2 border-b border-line bg-surface px-5 py-2 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-caption text-fg-subtle">Loadstring</span>
+            <code className="truncate rounded border border-line-subtle bg-canvas px-1.5 font-data text-micro leading-5 text-fg-muted select-all">
               {getLoadstring()}
             </code>
           </div>
-          <button
-            type="button"
-            onClick={handleCopyLoadstring}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 text-[11px] font-medium shrink-0 transition-colors"
-          >
-            {copiedLoadstring ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-gray-400" />}
-            {copiedLoadstring ? "Copied" : "Copy Loadstring"}
-          </button>
+          <Button size="xs" onClick={handleCopyLoadstring}>
+            {copiedLoadstring ? <Check className="text-success-text" /> : <Copy />}
+            {copiedLoadstring ? "Copied" : "Copy loadstring"}
+          </Button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1">
+        <div className="space-y-4">
           {/* Success Banner */}
           {saveSuccess && (
-            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-success-text text-caption flex items-center gap-2.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-success-text" />
               <span>{saveSuccess}</span>
             </div>
           )}
 
           {/* Error Banner */}
           {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2.5 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+            <div className="p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger-text text-caption flex items-center gap-2.5 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 text-danger-text" />
               <span>{error}</span>
             </div>
           )}
 
+          {/* Luau VM Obfuscator Preset & Protection Status Bar */}
+          <div className="p-3 bg-surface border border-line rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <Cpu className="w-4 h-4 text-accent-text shrink-0" />
+              <div>
+                <div className="text-caption font-semibold text-fg flex items-center gap-2">
+                  <span>Luau VM Obfuscator Preset</span>
+                  <span className="text-micro bg-accent/10 text-accent-text border border-accent/25 px-1.5 py-0.5 rounded font-data">
+                    Auto-Compile
+                  </span>
+                </div>
+                <p className="text-micro text-fg-muted">
+                  Saving any changes will automatically re-bundle and compile your code through the Luau VM.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <select
+                value={vmPreset}
+                onChange={(e) => setVmPreset(e.target.value as "balanced" | "maximum" | "ultra")}
+                className="bg-surface-raised border border-line-strong rounded-lg px-2.5 py-1.5 text-caption text-fg font-medium outline-none focus:border-accent"
+              >
+                <option value="balanced">Balanced (0 FPS Hit, Recommended)</option>
+                <option value="maximum">Maximum (Aggressive Hardening)</option>
+                <option value="ultra">Ultra (Max Polymorphism)</option>
+              </select>
+            </div>
+          </div>
+
           {/* STEP 1: Choose which file you are updating */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="w-4 h-4 rounded-full bg-blue-600 text-[10px] text-white flex items-center justify-center font-bold">
+              <label className="text-caption font-bold text-fg flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded-full bg-accent text-micro text-accent-fg flex items-center justify-center font-bold">
                   1
                 </span>
                 Choose Which File to Update:
@@ -362,7 +400,7 @@ export default function ScriptUpdateModal({
               <button
                 type="button"
                 onClick={() => setIsAddingFile(!isAddingFile)}
-                className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
+                className="text-micro font-semibold text-accent-text hover:text-accent-text flex items-center gap-1 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add New File
@@ -371,26 +409,26 @@ export default function ScriptUpdateModal({
 
             {/* Add New File Sub-form */}
             {isAddingFile && (
-              <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-accent/5 border border-accent/20 flex items-center gap-2">
                 <input
                   type="text"
                   placeholder="e.g. modules/teleport.lua"
                   value={newFileNameInput}
                   onChange={(e) => setNewFileNameInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddNewFile()}
-                  className="flex-1 bg-[#0b0d14] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  className="flex-1 bg-surface border border-line-strong rounded-lg px-3 py-1.5 text-caption text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent"
                 />
                 <button
                   type="button"
                   onClick={handleAddNewFile}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium"
+                  className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-accent-fg rounded-lg text-caption font-medium"
                 >
                   Create
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsAddingFile(false)}
-                  className="px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg text-xs font-medium"
+                  className="px-2.5 py-1.5 bg-surface-hover hover:bg-surface-active text-fg-muted rounded-lg text-caption font-medium"
                 >
                   Cancel
                 </button>
@@ -408,7 +446,7 @@ export default function ScriptUpdateModal({
                     setSaveSuccess(null);
                     setError(null);
                   }}
-                  className="w-full bg-[#141722] border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-blue-500 appearance-none cursor-pointer"
+                  className="w-full bg-surface-raised border border-line-strong rounded-lg px-3.5 py-2.5 text-caption font-data text-fg focus:outline-none focus:border-accent appearance-none cursor-pointer"
                 >
                   {fileKeys.map((f) => (
                     <option key={f} value={f}>
@@ -424,15 +462,15 @@ export default function ScriptUpdateModal({
                   <button
                     type="button"
                     onClick={() => setEntryFile(selectedFile)}
-                    className="flex items-center gap-1 px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium border border-gray-700 transition-colors"
+                    className="flex items-center gap-1 px-3 py-2 rounded-lg bg-surface-hover hover:bg-surface-active text-fg text-caption font-medium border border-line-strong transition-colors"
                     title="Set this file as the script entry point"
                   >
-                    <Star className="w-3.5 h-3.5 text-amber-400" />
+                    <Star className="w-3.5 h-3.5 text-warning-text" />
                     Set as Entry
                   </button>
                 ) : (
-                  <span className="flex items-center gap-1 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
-                    <Star className="w-3.5 h-3.5 fill-amber-400" />
+                  <span className="flex items-center gap-1 px-3 py-2 rounded-lg bg-warning/10 border border-warning/20 text-warning-text text-caption font-semibold">
+                    <Star className="w-3.5 h-3.5 fill-warning" />
                     Main Entry File
                   </span>
                 )}
@@ -441,7 +479,7 @@ export default function ScriptUpdateModal({
                   <button
                     type="button"
                     onClick={() => handleDeleteFile(selectedFile)}
-                    className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors"
+                    className="p-2 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger-text border border-danger/20 transition-colors"
                     title="Delete this file from script"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -466,15 +504,15 @@ export default function ScriptUpdateModal({
                       setUploadedFileName(null);
                       setSaveSuccess(null);
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all flex items-center gap-1.5 ${
+                    className={`px-2.5 py-1 rounded-lg text-micro font-data transition-all flex items-center gap-1.5 ${
                       isSelected
-                        ? "bg-blue-600 text-white font-semibold shadow-sm"
-                        : "bg-[#141722] hover:bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-800"
+                        ? "bg-accent text-accent-fg font-semibold"
+                        : "bg-surface-raised hover:bg-surface-hover text-fg-muted hover:text-fg border border-line"
                     }`}
                   >
                     <span>{f.split("/").pop()}</span>
-                    {isEntry && <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1 py-0.2 rounded font-sans">entry</span>}
-                    {isModified && <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>}
+                    {isEntry && <span className="text-micro bg-warning/20 text-warning-text px-1 py-0.2 rounded font-sans">entry</span>}
+                    {isModified && <span className="w-1.5 h-1.5 rounded-full bg-warning"></span>}
                   </button>
                 );
               })}
@@ -484,52 +522,30 @@ export default function ScriptUpdateModal({
           {/* STEP 2: Choose what to update it with */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="w-4 h-4 rounded-full bg-blue-600 text-[10px] text-white flex items-center justify-center font-bold">
+              <label className="text-caption font-bold text-fg flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded-full bg-accent text-micro text-accent-fg flex items-center justify-center font-bold">
                   2
                 </span>
                 Choose What to Update It With:
               </label>
 
-              {/* Mode Tabs */}
-              <div className="flex items-center gap-1 bg-[#141722] p-1 rounded-lg border border-gray-800">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("upload")}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    activeTab === "upload"
-                      ? "bg-blue-600 text-white shadow"
-                      : "text-gray-400 hover:text-gray-200"
-                  }`}
-                >
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  Upload Replacement File
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("editor")}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    activeTab === "editor"
-                      ? "bg-blue-600 text-white shadow"
-                      : "text-gray-400 hover:text-gray-200"
-                  }`}
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  Edit / Paste Code
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("github")}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    activeTab === "github"
-                      ? "bg-blue-600 text-white shadow"
-                      : "text-gray-400 hover:text-gray-200"
-                  }`}
-                >
-                  <GitBranch className="w-3.5 h-3.5" />
-                  GitHub Sync & Auto-Pull
-                </button>
-              </div>
+              {/* Mode tabs */}
+              <Tabs variant="segmented" value={activeTab} onValueChange={(v) => setActiveTab(v as "upload" | "editor" | "github")}>
+                <TabsList>
+                  <TabsTrigger value="upload">
+                    <UploadCloud />
+                    Upload file
+                  </TabsTrigger>
+                  <TabsTrigger value="editor">
+                    <Edit3 />
+                    Edit / paste code
+                  </TabsTrigger>
+                  <TabsTrigger value="github">
+                    <GitBranch />
+                    GitHub sync
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
 
             {/* TAB 1: Upload Replacement File */}
@@ -537,7 +553,7 @@ export default function ScriptUpdateModal({
               <div className="space-y-3">
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-700/80 hover:border-blue-500/80 bg-[#141722]/60 hover:bg-blue-500/5 rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 group"
+                  className="border border-dashed border-line-strong hover:border-accent/80 bg-surface-raised hover:bg-accent/5 rounded-lg p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 group"
                 >
                   <input
                     ref={fileInputRef}
@@ -546,23 +562,23 @@ export default function ScriptUpdateModal({
                     onChange={handleUploadedFile}
                     className="hidden"
                   />
-                  <div className="w-12 h-12 rounded-2xl bg-blue-500/10 group-hover:bg-blue-500/20 text-blue-400 flex items-center justify-center transition-transform group-hover:scale-105">
+                  <div className="w-12 h-12 rounded-lg bg-accent/10 group-hover:bg-accent/20 text-accent-text flex items-center justify-center transition-transform group-hover:scale-105">
                     <UploadCloud className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-xs sm:text-sm font-semibold text-white">
-                      Click to choose replacement file for <span className="text-blue-400 font-mono">{selectedFile}</span>
+                    <p className="text-caption sm:text-body-sm font-semibold text-fg">
+                      Click to choose replacement file for <span className="text-accent-text font-data">{selectedFile}</span>
                     </p>
-                    <p className="text-[11px] text-gray-500 mt-0.5">
-                      Accepts <code className="text-gray-400">.lua</code>, <code className="text-gray-400">.luau</code>, or <code className="text-gray-400">.txt</code> from your computer.
+                    <p className="text-micro text-fg-subtle mt-0.5">
+                      Accepts <code className="text-fg-muted">.lua</code>, <code className="text-fg-muted">.luau</code>, or <code className="text-fg-muted">.txt</code> from your computer.
                     </p>
                   </div>
                 </div>
 
                 {uploadedFileName && (
-                  <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs flex items-center justify-between">
+                  <div className="p-3 rounded-lg bg-accent/10 border border-accent/30 text-accent-text text-caption flex items-center justify-between">
                     <div className="flex items-center gap-2 truncate">
-                      <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-accent-text shrink-0" />
                       <span className="truncate">
                         Loaded replacement from: <strong>{uploadedFileName}</strong> ({lineCount} lines, {(byteSize / 1024).toFixed(1)} KB)
                       </span>
@@ -570,7 +586,7 @@ export default function ScriptUpdateModal({
                     <button
                       type="button"
                       onClick={() => setActiveTab("editor")}
-                      className="text-xs font-semibold text-blue-400 hover:underline shrink-0 ml-2"
+                      className="text-caption font-semibold text-accent-text hover:underline shrink-0 ml-2"
                     >
                       View in Editor →
                     </button>
@@ -581,78 +597,78 @@ export default function ScriptUpdateModal({
 
             {/* TAB 3: GitHub Sync & Auto-Pull Settings */}
             <div className={activeTab === "github" ? "space-y-4" : "hidden"}>
-              <div className="p-4 rounded-xl bg-[#0d0f16] border border-gray-800 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-gray-800">
+              <div className="p-4 rounded-lg bg-surface border border-line space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-line">
                   <div className="flex items-center gap-2">
-                    <FolderGit2 className="w-4 h-4 text-blue-400" />
-                    <span className="text-sm font-semibold text-white">Connected GitHub Repository</span>
+                    <FolderGit2 className="w-4 h-4 text-accent-text" />
+                    <span className="text-body-sm font-semibold text-fg">Connected GitHub Repository</span>
                   </div>
                   {githubLastCommit && (
-                    <span className="text-[11px] font-mono text-gray-400 bg-gray-800 px-2 py-0.5 rounded">
+                    <span className="text-micro font-data text-fg-muted bg-surface-hover px-2 py-0.5 rounded">
                       SHA: {githubLastCommit.substring(0, 7)}
                     </span>
                   )}
                 </div>
 
                 {githubSyncMsg && (
-                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 rounded-lg text-xs flex items-center gap-2">
+                  <div className="p-3 bg-success/10 border border-success/20 text-success-text rounded-lg text-caption flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>{githubSyncMsg}</span>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-caption">
                   <div>
-                    <label className="block text-gray-300 font-medium mb-1">Repository Slug / URL</label>
+                    <label className="block text-fg font-medium mb-1">Repository Slug / URL</label>
                     <input
                       type="text"
                       value={githubRepo}
                       onChange={(e) => setGithubRepo(e.target.value)}
                       placeholder="owner/repo (e.g. revileDev/TestFork)"
-                      className="w-full bg-[#141722] border border-gray-700/80 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono text-xs"
+                      className="w-full bg-surface-raised border border-line-strong rounded-lg px-3 py-2 text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent font-data text-caption"
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-300 font-medium mb-1">Branch</label>
+                    <label className="block text-fg font-medium mb-1">Branch</label>
                     <input
                       type="text"
                       value={githubBranch}
                       onChange={(e) => setGithubBranch(e.target.value)}
                       placeholder="main"
-                      className="w-full bg-[#141722] border border-gray-700/80 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono text-xs"
+                      className="w-full bg-surface-raised border border-line-strong rounded-lg px-3 py-2 text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent font-data text-caption"
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-300 font-medium mb-1">Subdirectory (Optional)</label>
+                    <label className="block text-fg font-medium mb-1">Subdirectory (Optional)</label>
                     <input
                       type="text"
                       value={githubDirectory}
                       onChange={(e) => setGithubDirectory(e.target.value)}
                       placeholder="e.g. Rivals (leave blank for root)"
-                      className="w-full bg-[#141722] border border-gray-700/80 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono text-xs"
+                      className="w-full bg-surface-raised border border-line-strong rounded-lg px-3 py-2 text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent font-data text-caption"
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-300 font-medium mb-1">Personal Access Token (Private Repos)</label>
+                    <label className="block text-fg font-medium mb-1">Personal Access Token (Private Repos)</label>
                     <input
                       type="password"
                       value={githubToken}
                       onChange={(e) => setGithubToken(e.target.value)}
                       placeholder="ghp_... (optional)"
-                      className="w-full bg-[#141722] border border-gray-700/80 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 font-mono text-xs"
+                      className="w-full bg-surface-raised border border-line-strong rounded-lg px-3 py-2 text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent font-data text-caption"
                     />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-gray-800">
+                <div className="flex items-center justify-between pt-3 border-t border-line">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={githubAutoPull}
                       onChange={(e) => setGithubAutoPull(e.target.checked)}
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900 bg-gray-800 border-gray-700"
+                      className="w-4 h-4 rounded text-accent-text focus:ring-accent focus:ring-offset-canvas bg-surface-hover border-line-strong"
                     />
-                    <span className="text-xs text-gray-200 font-medium">
+                    <span className="text-caption text-fg font-medium">
                       Enable Auto-Pull (Pulls updated files from latest commits automatically)
                     </span>
                   </label>
@@ -661,7 +677,7 @@ export default function ScriptUpdateModal({
                     type="button"
                     onClick={handlePullFromGitHub}
                     disabled={isSyncingGitHub || !githubRepo}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-md transition-all"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg text-caption font-semibold transition-all"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncingGitHub ? "animate-spin" : ""}`} />
                     {isSyncingGitHub ? "Pulling Latest..." : "Pull Latest from GitHub Now"}
@@ -669,7 +685,7 @@ export default function ScriptUpdateModal({
                 </div>
 
                 {githubLastPulledAt && (
-                  <p className="text-[11px] text-gray-400">
+                  <p className="text-micro text-fg-muted">
                     Last synchronized: {new Date(githubLastPulledAt).toLocaleString()}
                   </p>
                 )}
@@ -679,15 +695,15 @@ export default function ScriptUpdateModal({
             {/* TAB 2: Edit / Paste Code Directly */}
             <div className={activeTab === "editor" ? "space-y-2" : "hidden"}>
               {/* Toolbar */}
-              <div className="flex items-center justify-between text-xs text-gray-400 pb-1">
+              <div className="flex items-center justify-between text-caption text-fg-muted pb-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-gray-300">{selectedFile}</span>
+                  <span className="font-data text-fg">{selectedFile}</span>
                   <span>•</span>
                   <span>{lineCount} lines</span>
                   <span>•</span>
                   <span>{(byteSize / 1024).toFixed(1)} KB</span>
                   {isCurrentFileModified && (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-semibold">
+                    <span className="px-1.5 py-0.5 rounded bg-warning/10 text-warning-text border border-warning/20 text-micro font-semibold">
                       Unsaved Changes
                     </span>
                   )}
@@ -697,7 +713,7 @@ export default function ScriptUpdateModal({
                   <button
                     type="button"
                     onClick={handlePasteClipboard}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-[11px] font-medium transition-colors"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-surface-hover hover:bg-surface-active text-fg text-micro font-medium transition-colors"
                   >
                     <ClipboardPaste className="w-3 h-3" />
                     Paste Clipboard
@@ -706,7 +722,7 @@ export default function ScriptUpdateModal({
                     <button
                       type="button"
                       onClick={handleRevert}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-[11px] font-medium transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-surface-hover hover:bg-surface-active text-fg text-micro font-medium transition-colors"
                       title="Revert to original file content"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -717,7 +733,7 @@ export default function ScriptUpdateModal({
               </div>
 
               {/* Textarea */}
-              <div className="relative border border-gray-800 rounded-xl overflow-hidden bg-[#0a0c12]">
+              <div className="relative border border-line rounded-lg overflow-hidden bg-surface">
                 <textarea
                   value={currentContent}
                   onChange={(e) => handleFileContentChange(e.target.value)}
@@ -738,53 +754,13 @@ export default function ScriptUpdateModal({
                   }}
                   placeholder="Paste or write your Lua code here..."
                   rows={14}
-                  className="w-full bg-transparent p-4 font-mono text-xs text-gray-200 placeholder-gray-600 focus:outline-none resize-y leading-relaxed"
+                  className="w-full bg-transparent p-4 font-data text-caption text-fg placeholder:text-fg-subtle focus:outline-none resize-y leading-relaxed"
                   spellCheck={false}
                 />
               </div>
             </div>
           </div>
         </div>
-
-        {/* Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-gray-800 bg-[#141722]/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-[11px] text-gray-400 flex items-center gap-1.5">
-            <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>
-              Loadstring URL is locked and will <strong>not</strong> change: <code className="text-gray-300 font-mono">/api/loader/{script.slug}</code>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSaving}
-              className="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition-colors"
-            >
-              Close
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 transition-all"
-            >
-              {isSaving ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Saving Updates...
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4" />
-                  Save & Deploy Update
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

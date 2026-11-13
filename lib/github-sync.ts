@@ -1,5 +1,6 @@
 // lib/github-sync.ts
 import { dbService, ScriptRecord } from "./store";
+import { obfuscateLuauVM, bundleModules, verifyLuauBytecode } from "./obfuscator";
 
 export interface GitHubSyncOptions {
   repo: string; // "owner/repo" or "https://github.com/owner/repo"
@@ -314,6 +315,37 @@ export async function syncScriptFromGitHub(
     return pullResult;
   }
 
+  // Re-bundle and re-obfuscate payload from latest GitHub commit
+  let reobfStats = script.obfuscation_stats;
+  try {
+    const targetEntry = pullResult.entryFile || script.entry_file || "init.lua";
+    let bundledCode: string;
+    if (Object.keys(pullResult.modules).length === 1 && (pullResult.modules[targetEntry] || Object.values(pullResult.modules)[0])) {
+      bundledCode = pullResult.modules[targetEntry] || Object.values(pullResult.modules)[0];
+    } else {
+      bundledCode = bundleModules({ entryFile: targetEntry, files: pullResult.modules });
+    }
+    const obfResult = await obfuscateLuauVM(bundledCode, { preset: (script.vm_preset as any) || "balanced" });
+    if (obfResult.ok) {
+      const verifyCheck = verifyLuauBytecode(obfResult.output);
+      if (verifyCheck.ok) {
+        const rawBytes = Buffer.byteLength(bundledCode, "utf8");
+        const outBytes = Buffer.byteLength(obfResult.output, "utf8");
+        reobfStats = {
+          inputSize: rawBytes,
+          outputSize: outBytes,
+          time: obfResult.stats?.time || 0,
+          expansionRatio: Number((outBytes / Math.max(1, rawBytes)).toFixed(2)),
+          preset: script.vm_preset || "balanced",
+          layers: obfResult.stats?.layers || [],
+        };
+        await dbService.saveProtectedPayload(script.slug, obfResult.output, reobfStats);
+      }
+    }
+  } catch (syncObfErr) {
+    console.error("Error auto-obfuscating GitHub sync:", syncObfErr);
+  }
+
   // Update script record in store
   const now = new Date().toISOString();
   const updatedScript: ScriptRecord = {
@@ -322,6 +354,9 @@ export async function syncScriptFromGitHub(
     entry_file: pullResult.entryFile || script.entry_file || "init.lua",
     github_last_commit: pullResult.commitSha,
     github_last_pulled_at: now,
+    is_obfuscated: true,
+    obfuscated_at: now,
+    obfuscation_stats: reobfStats,
     updated_at: now,
   };
 

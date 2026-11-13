@@ -1,4 +1,4 @@
-// app/api/checkpoints/bypass-attempts/route.ts
+﻿// app/api/checkpoints/bypass-attempts/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
@@ -6,7 +6,7 @@ import { isAuthenticated } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 

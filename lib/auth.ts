@@ -2,21 +2,37 @@
 import { cookies, headers } from "next/headers";
 import { hmacSha256, constantTimeEquals } from "@/lib/crypto-util";
 
-export const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "Revile2120516501";
-export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "2120516501Id@y6y7y8y9pl";
+// SECURITY: these must come from the environment. There is deliberately no hardcoded
+// fallback here anymore — a previous version of this file fell back to a known,
+// hardcoded admin username/password/HMAC secret (and a permanent legacy bypass token)
+// whenever the env vars were unset, which meant anyone with this source code could log
+// in as admin or forge a valid session. If any of these are missing, auth fails closed.
+export const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 export const AUTH_COOKIE_NAME = "aero_admin_session";
-// Legacy static token retained for backward compatibility
-export const AUTH_TOKEN_VALUE = "revile_auth_session_92103f8a619c";
 
-const AUTH_SECRET = process.env.AUTH_SECRET || "aero_admin_secret_hmac_key_92103f8a619c";
+const AUTH_SECRET = process.env.AUTH_SECRET || "";
+
+function secretsConfigured(): boolean {
+  if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !AUTH_SECRET) {
+    console.error(
+      "[auth] ADMIN_USERNAME, ADMIN_PASSWORD, and AUTH_SECRET must all be set in the environment. " +
+        "Refusing all admin authentication until they are configured."
+    );
+    return false;
+  }
+  return true;
+}
 
 /**
- * Validates admin username and password against environment or secure defaults.
+ * Validates admin username and password against environment-configured credentials.
+ * Fails closed (returns false) if the required env vars aren't set.
  */
 export function verifyCredentials(user: string, pass: string): boolean {
+  if (!secretsConfigured()) return false;
   if (!user || !pass) return false;
-  return user === ADMIN_USERNAME && pass === ADMIN_PASSWORD;
+  return constantTimeEquals(user, ADMIN_USERNAME) && constantTimeEquals(pass, ADMIN_PASSWORD);
 }
 
 /**
@@ -30,14 +46,12 @@ export function createSessionToken(): string {
 }
 
 /**
- * Verifies if a given token is a valid, unexpired session token or valid legacy token.
- * Max token age: 7 days.
+ * Verifies if a given token is a valid, unexpired session token.
+ * Max token age: 7 days. Fails closed if AUTH_SECRET isn't configured.
  */
 export function isValidSessionToken(token: string | undefined | null): boolean {
   if (!token || typeof token !== "string") return false;
-
-  // Accept legacy token during transition
-  if (token === AUTH_TOKEN_VALUE) return true;
+  if (!AUTH_SECRET) return false;
 
   const parts = token.split(".");
   if (parts.length !== 2) return false;
@@ -58,8 +72,10 @@ export function isValidSessionToken(token: string | undefined | null): boolean {
 
 /**
  * Checks whether the current request is authenticated as admin via Authorization header or cookies.
+ * Next.js 15+/16 made `headers()`/`cookies()` async, so this is now async too — all call sites
+ * must `await` it.
  */
-export function isAuthenticated(req?: Request): boolean {
+export async function isAuthenticated(req?: Request): Promise<boolean> {
   try {
     // 1. Direct request parameter check
     if (req) {
@@ -72,7 +88,7 @@ export function isAuthenticated(req?: Request): boolean {
 
     // 2. Next.js headers() check
     try {
-      const headerStore = headers();
+      const headerStore = await headers();
       const authHeader = headerStore.get("authorization");
       if (authHeader?.startsWith("Bearer ")) {
         const token = authHeader.substring(7).trim();
@@ -83,7 +99,7 @@ export function isAuthenticated(req?: Request): boolean {
     }
 
     // 3. Fallback to session cookie
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const session = cookieStore.get(AUTH_COOKIE_NAME)?.value;
     return isValidSessionToken(session);
   } catch {

@@ -4,6 +4,7 @@ import { dbService } from "@/lib/store";
 import { generateLuaLoader } from "@/lib/lua-generator";
 import { getClientIp, normalizeIp } from "@/lib/ip";
 import { wrapPolymorphicLuau } from "@/lib/polymorphic";
+import { obfuscateLuauVM, verifyLuauBytecode } from "@/lib/obfuscator";
 import crypto from "crypto";
 
 interface ProbeSession {
@@ -18,6 +19,10 @@ interface ProbeSession {
 
 const activeProbeSessions = new Map<string, ProbeSession>();
 const PROBE_TIMEOUT_MS = 60 * 1000; // 60 seconds
+
+// In-memory Stage 1 Auth GUI VM cache to eliminate server re-compilation CPU load
+const stage1VmCache = new Map<string, { payload: string; cachedAt: number }>();
+const STAGE1_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function cleanupOldSessions() {
   const now = Date.now();
@@ -250,16 +255,40 @@ export async function POST(req: NextRequest) {
       layout_positions:    loaderConfig?.layout_positions,
     });
 
-    const loaderWithToken = `--[[ AERO GATEWAY AUTHORIZED PAYLOAD ]]
-_G.__AERO_GATEWAY_TOKEN = "${gatewayToken}";
-${rawLoaderLua}`;
+    // Protect Stage 1 Auth GUI with Luau VM Obfuscation
+    // Cached in-memory per baseUrl:slug:loaderConfig to deliver < 2ms instant responses
+    const cacheKey = `${baseUrl}:${slug}:${loaderConfig?.id || "default"}`;
+    const cached = stage1VmCache.get(cacheKey);
+    let finalLoaderPayload: string;
 
-    const polymorphicPayload = wrapPolymorphicLuau(loaderWithToken);
+    if (cached && Date.now() - cached.cachedAt < STAGE1_CACHE_TTL_MS) {
+      finalLoaderPayload = cached.payload;
+    } else {
+      try {
+        const vmResult = await obfuscateLuauVM(rawLoaderLua, { preset: "balanced" });
+        if (vmResult.ok) {
+          const verify = verifyLuauBytecode(vmResult.output);
+          if (verify.ok) {
+            finalLoaderPayload = vmResult.output;
+            stage1VmCache.set(cacheKey, { payload: finalLoaderPayload, cachedAt: Date.now() });
+          } else {
+            const loaderWithToken = `--[[ AERO GATEWAY AUTHORIZED PAYLOAD ]]\n_G.__AERO_GATEWAY_TOKEN = "${gatewayToken}";\n${rawLoaderLua}`;
+            finalLoaderPayload = wrapPolymorphicLuau(loaderWithToken);
+          }
+        } else {
+          const loaderWithToken = `--[[ AERO GATEWAY AUTHORIZED PAYLOAD ]]\n_G.__AERO_GATEWAY_TOKEN = "${gatewayToken}";\n${rawLoaderLua}`;
+          finalLoaderPayload = wrapPolymorphicLuau(loaderWithToken);
+        }
+      } catch {
+        const loaderWithToken = `--[[ AERO GATEWAY AUTHORIZED PAYLOAD ]]\n_G.__AERO_GATEWAY_TOKEN = "${gatewayToken}";\n${rawLoaderLua}`;
+        finalLoaderPayload = wrapPolymorphicLuau(loaderWithToken);
+      }
+    }
 
     return NextResponse.json({
       success: true,
       gateway_token: gatewayToken,
-      loader_payload: polymorphicPayload,
+      loader_payload: finalLoaderPayload,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error evaluating probe";

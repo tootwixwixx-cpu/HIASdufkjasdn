@@ -1,11 +1,11 @@
-// app/api/scripts/github/sync/route.ts
+﻿// app/api/scripts/github/sync/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { fetchFilesFromGitHub, syncScriptFromGitHub, parseGitHubRepoSlug } from "@/lib/github-sync";
 import { dbService } from "@/lib/store";
 
 export async function POST(req: NextRequest) {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 

@@ -52,6 +52,25 @@ scraper_app.py
 
 luau_bin/
 
+# obfuscator debug/test output and scratch artifacts (not needed for deployment; some are
+# obfuscated copies of third-party scripts used only as local stress-test corpus)
+obfuscator/protected/
+obfuscator/tools/out/
+obfuscator/_test_lf.lua
+obfuscator/inspect_p8.lua
+lib/obfuscator/tools/out/
+obfuscator/tools/fixtures/untrusted/
+
+# standalone local obfuscator dev dashboard (never used by the deployed app -- see
+# obfuscator/server.js; not referenced by any app/api route -- and its dashboard embeds
+# hardcoded personal local folder paths in its file-browser presets)
+obfuscator/server.js
+obfuscator/start.bat
+obfuscator/public/
+
+# Next.js auto-generated, not authored content
+/AGENTS.md
+
 # github workflows (prevent oauth scope error during push)
 .github/
 

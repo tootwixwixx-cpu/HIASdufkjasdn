@@ -5,7 +5,21 @@ import React, { useState, useEffect } from "react";
 import ModularScriptUploader from "@/components/ModularScriptUploader";
 import ScriptUpdateModal from "@/components/ScriptUpdateModal";
 import type { LoaderConfigRecord, ScriptRecord } from "@/lib/store";
-import { Terminal, Copy, Check, Trash2, Sliders, ExternalLink, ShieldCheck, FileEdit, AlertTriangle } from "lucide-react";
+import { Copy, Check, Trash2, Sliders, ExternalLink, FileEdit, AlertTriangle, Cpu } from "lucide-react";
+import {
+  Badge,
+  Button,
+  buttonClasses,
+  Spinner,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableEmpty,
+  TableToolbar,
+} from "@/components/ui";
 import Link from "next/link";
 
 export default function ScriptsPage() {
@@ -100,195 +114,198 @@ export default function ScriptsPage() {
     }
   };
 
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      {/* Page Header */}
-      <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
-          <Terminal className="w-6 h-6 text-blue-400" />
-          Modular Scripts Vault
-        </h1>
-        <p className="text-xs sm:text-sm text-gray-400 mt-1">
-          Upload modular Lua projects. Scripts are stored in backend memory and only served securely after in-game key validation.
-        </p>
-      </div>
-
-      {/* Upload Component */}
-      <ModularScriptUploader
-        loaderConfigs={loaderConfigs}
-        onScriptCreated={handleScriptCreated}
-      />
-
-      {/* Stored Scripts List */}
-      <div className="bg-[#12141d] border border-gray-800 rounded-xl p-5 shadow-xl">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-800">
-          <div>
-            <h2 className="text-sm font-bold text-white">Protected Scripts ({scripts.length})</h2>
-            <p className="text-xs text-gray-400">
-              Active loadstrings for your executors and Roblox players.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {scripts.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setUpdatingScript(scripts[0])}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600/25 text-blue-400 border border-blue-500/30 text-xs font-semibold transition-all"
-              >
-                <FileEdit className="w-3.5 h-3.5" />
-                Update Script Files
-              </button>
-            )}
-            <Link
-              href="/dashboard/loader-builder"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-200 border border-gray-700 transition-all"
-            >
-              <Sliders className="w-3.5 h-3.5 text-purple-400" />
-              Build Auth Loader
-            </Link>
-          </div>
+    <div className="space-y-4">
+      {/* Page header */}
+      <div className="flex flex-col justify-between gap-3 border-b border-line pb-3 sm:flex-row sm:items-end">
+        <div className="min-w-0">
+          <h1 className="text-heading font-semibold text-fg">Scripts vault</h1>
+          <p className="mt-0.5 text-body-sm text-fg-muted">
+            Upload modular Lua projects. Scripts stay on the server and are served only after an in-game key check.
+          </p>
         </div>
-
-        {loading ? (
-          <div className="text-center py-8 text-xs text-gray-500">Loading scripts...</div>
-        ) : scripts.length === 0 ? (
-          <div className="text-center py-12 border border-dashed border-gray-800 rounded-xl bg-[#0d0f16]/40">
-            <ShieldCheck className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-            <p className="text-xs text-gray-400 font-medium">No scripts added yet.</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">
-              Upload your first modular folder above to get a secure loadstring.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {scripts.map((s) => {
-              const numModules = Object.keys(s.modules || {}).length;
-              const assignedLoader = loaderConfigs.find((c) => c.id === s.loader_config_id);
-
-              return (
-                <div
-                  key={s.id}
-                  className="bg-[#0b0d14] border border-gray-800/90 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-gray-700 transition-all"
-                >
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-white">{s.name}</h3>
-                      <span className="text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">
-                        /{s.slug}
-                      </span>
-                      {s.use_auth !== false ? (
-                        <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded">
-                          Auth Gate Enabled
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-semibold bg-gray-800 text-gray-400 border border-gray-700 px-2 py-0.5 rounded">
-                          Direct Run
-                        </span>
-                      )}
-                      {s.is_maintenance && (
-                        <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded flex items-center gap-1 animate-pulse">
-                          <AlertTriangle className="w-3 h-3" />
-                          MAINTENANCE ACTIVE
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-400">
-                      <span>
-                        Main Entry: <strong className="text-gray-200 font-mono">{s.entry_file}</strong>
-                      </span>
-                      <span>•</span>
-                      <span>
-                        Total Modules: <strong className="text-gray-200">{numModules}</strong>
-                      </span>
-                      <span>•</span>
-                      <span>
-                        Loader:{" "}
-                        <strong className="text-purple-300">
-                          {assignedLoader ? assignedLoader.name : "Default"}
-                        </strong>
-                      </span>
-                    </div>
-
-                    {/* Maintenance Alert Notice */}
-                    {s.is_maintenance && (
-                      <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-300 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 truncate">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                          Notice: {s.maintenance_message || "Script under maintenance"}
-                        </span>
-                        <span className="text-[10px] text-gray-400 ml-2 shrink-0 font-mono">
-                          Staff Review Keys Bypass
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Loadstring box */}
-                    <div className="pt-2 flex items-center gap-2 max-w-2xl">
-                      <div className="bg-[#12141f] border border-gray-800 rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-blue-300 truncate flex-1 select-all">
-                        {getLoadstring(s.slug)}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyLoadstring(s.id, s.slug)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold whitespace-nowrap transition-all"
-                      >
-                        {copiedId === s.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                        {copiedId === s.id ? "Copied" : "Copy Loadstring"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleMaintenance(s)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all shadow-sm ${
-                        s.is_maintenance
-                          ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40"
-                          : "bg-gray-800/80 hover:bg-gray-700 text-gray-300 border border-gray-700"
-                      }`}
-                      title={s.is_maintenance ? "Turn off maintenance mode" : "Enable maintenance kill-switch"}
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                      {s.is_maintenance ? "Disable Maintenance" : "Kill-Switch"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUpdatingScript(s)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600/15 hover:bg-blue-600/25 text-blue-400 hover:text-blue-300 border border-blue-500/30 text-xs font-semibold transition-all shadow-sm"
-                      title="Update script files without resetting loadstring"
-                    >
-                      <FileEdit className="w-3.5 h-3.5" />
-                      Update Files
-                    </button>
-                    <a
-                      href={`/api/loader/${s.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 transition-colors"
-                      title="Inspect Public Loader Code"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(s.id)}
-                      className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors"
-                      title="Delete Script"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <Link href="/dashboard/loader-builder" className={buttonClasses({ size: "sm" })}>
+          <Sliders />
+          Build auth loader
+        </Link>
       </div>
 
-      {/* Script Update Modal */}
+      {/* Upload */}
+      <ModularScriptUploader loaderConfigs={loaderConfigs} onScriptCreated={handleScriptCreated} />
+
+      {/* Stored scripts */}
+      <div>
+        <TableToolbar className="justify-between">
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-title font-semibold text-fg">Protected scripts</h2>
+            <span className="font-data text-caption text-fg-subtle">{scripts.length}</span>
+          </div>
+          {scripts.length > 0 && (
+            <Button size="sm" onClick={() => setUpdatingScript(scripts[0])}>
+              <FileEdit />
+              Update script files
+            </Button>
+          )}
+        </TableToolbar>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Script</TableHead>
+              <TableHead>Mode</TableHead>
+              <TableHead>Entry</TableHead>
+              <TableHead align="right">Modules</TableHead>
+              <TableHead>Loader</TableHead>
+              <TableHead>VM output</TableHead>
+              <TableHead>Loadstring</TableHead>
+              <TableHead align="right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <tr>
+                <td colSpan={8} className="px-3 py-10 text-center text-body-sm text-fg-muted">
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner />
+                    Loading scripts...
+                  </span>
+                </td>
+              </tr>
+            ) : scripts.length === 0 ? (
+              <TableEmpty
+                colSpan={8}
+                title="No scripts yet"
+                description="Upload a modular folder above to get a protected loadstring."
+              />
+            ) : (
+              scripts.map((s) => {
+                const numModules = Object.keys(s.modules || {}).length;
+                const assignedLoader = loaderConfigs.find((c) => c.id === s.loader_config_id);
+
+                return (
+                  <React.Fragment key={s.id}>
+                    <TableRow>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-fg">{s.name}</span>
+                          <span className="font-data text-caption text-fg-subtle">/{s.slug}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {s.is_maintenance && (
+                            <Badge tone="warning" dot title={s.maintenance_message || "Script under maintenance"}>
+                              Maintenance
+                            </Badge>
+                          )}
+                          {s.use_auth !== false ? <Badge tone="success">Auth gate</Badge> : <Badge>Direct run</Badge>}
+                          {s.is_obfuscated ? (
+                            <Badge tone="accent">
+                              <Cpu className="size-3" />
+                              Luau VM
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      <TableCell mono muted truncate={160}>
+                        {s.entry_file}
+                      </TableCell>
+                      <TableCell mono align="right">
+                        {numModules}
+                      </TableCell>
+                      <TableCell muted truncate={140}>
+                        {assignedLoader ? assignedLoader.name : "Default"}
+                      </TableCell>
+                      <TableCell mono muted>
+                        {s.obfuscation_stats ? (
+                          <>
+                            <span className="text-fg">
+                              {s.obfuscation_stats.outputSize ? (s.obfuscation_stats.outputSize / 1024).toFixed(1) : 0} KB
+                            </span>{" "}
+                            {s.obfuscation_stats.expansionRatio || 1}x, {s.vm_preset || "balanced"}
+                          </>
+                        ) : (
+                          <span className="text-fg-subtle">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="py-1">
+                        <div className="flex items-center gap-1">
+                          <code className="block max-w-[260px] truncate rounded border border-line-subtle bg-surface px-1.5 font-data text-micro leading-5 text-fg-muted select-all">
+                            {getLoadstring(s.slug)}
+                          </code>
+                          <Button
+                            variant={copiedId === s.id ? "secondary" : "primary"}
+                            size="xs"
+                            onClick={() => copyLoadstring(s.id, s.slug)}
+                          >
+                            {copiedId === s.id ? <Check /> : <Copy />}
+                            {copiedId === s.id ? "Copied" : "Copy"}
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell align="right">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => handleToggleMaintenance(s)}
+                            title={s.is_maintenance ? "Turn off maintenance mode" : "Enable maintenance kill-switch"}
+                            className={s.is_maintenance ? "text-warning-text" : "hover:text-warning-text"}
+                          >
+                            <AlertTriangle />
+                            {s.is_maintenance ? "End maintenance" : "Kill-switch"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => setUpdatingScript(s)}
+                            title="Update script files without resetting loadstring"
+                          >
+                            <FileEdit />
+                            Update
+                          </Button>
+                          <a
+                            href={`/api/loader/${s.slug}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={buttonClasses({ variant: "ghost", size: "xs", iconOnly: true })}
+                            title="Inspect public loader code"
+                            aria-label="Inspect public loader code"
+                          >
+                            <ExternalLink />
+                          </a>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            iconOnly
+                            onClick={() => handleDelete(s.id)}
+                            title="Delete script"
+                            aria-label="Delete script"
+                            className="hover:bg-danger/10 hover:text-danger-text"
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {s.is_maintenance && (
+                      <TableRow className="bg-warning/[0.04]">
+                        <TableCell colSpan={8} className="h-7 text-caption text-warning-text">
+                          <span className="mr-2 text-fg-subtle">Notice shown in game:</span>
+                          {s.maintenance_message || "Script under maintenance"}
+                          <span className="ml-2 text-fg-subtle">(staff review keys bypass)</span>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
       <ScriptUpdateModal
         script={updatingScript}
         isOpen={!!updatingScript}

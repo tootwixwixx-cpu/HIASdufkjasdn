@@ -13,7 +13,7 @@ const nextConfig = {
       },
     ];
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -24,6 +24,15 @@ const nextConfig = {
         tls: false,
         child_process: false,
       };
+    }
+    // DEV ENVIRONMENT NOTE: webpack's persistent filesystem cache
+    // (.next/cache/webpack/*.pack) can balloon to multiple GB per route
+    // compile on this project and repeatedly filled a disk-space-constrained
+    // dev machine (ENOSPC crashes during `next dev`/`next build`). Disabling
+    // it trades some rebuild speed for not exhausting disk. If you're on a
+    // machine with ample free disk, feel free to remove this override.
+    if (dev) {
+      config.cache = false;
     }
     return config;
   },

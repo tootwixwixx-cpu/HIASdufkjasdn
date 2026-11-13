@@ -1,4 +1,4 @@
-// app/api/telemetry/errors/route.ts
+﻿// app/api/telemetry/errors/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 
@@ -70,7 +70,7 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 

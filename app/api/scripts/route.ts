@@ -1,11 +1,12 @@
-// app/api/scripts/route.ts
+﻿// app/api/scripts/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
+import { obfuscateLuauVM, bundleModules, verifyLuauBytecode } from "@/lib/obfuscator";
 
 export async function GET() {
   const scripts = await dbService.getScripts();
-  const authed = isAuthenticated();
+  const authed = (await isAuthenticated());
   if (!authed) {
     const publicScripts = scripts
       .filter((s) => s.is_active !== false)
@@ -24,7 +25,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 
@@ -54,12 +55,46 @@ export async function POST(req: NextRequest) {
       if (isUuid) validConfigId = trimmed;
     }
 
+    // Bundle and automatically obfuscate with AtomProtect VM
+    let bundledCode: string;
+    const targetModules = modules || {};
+    if (Object.keys(targetModules).length === 1 && (targetModules[entry_file] || Object.values(targetModules)[0])) {
+      bundledCode = targetModules[entry_file] || (Object.values(targetModules)[0] as string);
+    } else {
+      bundledCode = bundleModules({
+        entryFile: entry_file,
+        files: targetModules,
+      });
+    }
+
+    const vmPreset = (body.preset === "maximum" || body.preset === "ultra") ? body.preset : "balanced";
+    const obfResult = await obfuscateLuauVM(bundledCode, { preset: vmPreset });
+    if (!obfResult.ok) {
+      return NextResponse.json({ error: `Obfuscation failed: ${obfResult.error}` }, { status: 422 });
+    }
+
+    const verifyCheck = verifyLuauBytecode(obfResult.output);
+    if (!verifyCheck.ok) {
+      return NextResponse.json({ error: `Luau Bytecode Syntax Verification Failed: ${verifyCheck.error}` }, { status: 422 });
+    }
+
+    const rawSizeBytes = Buffer.byteLength(bundledCode, "utf8");
+    const outSizeBytes = Buffer.byteLength(obfResult.output, "utf8");
+    const stats = {
+      inputSize: rawSizeBytes,
+      outputSize: outSizeBytes,
+      time: obfResult.stats?.time || 0,
+      expansionRatio: Number((outSizeBytes / Math.max(1, rawSizeBytes)).toFixed(2)),
+      preset: vmPreset,
+      layers: obfResult.stats?.layers || [],
+    };
+
     const script = await dbService.saveScript({
       id: body.id || undefined,
       name,
       slug: cleanSlug,
       entry_file,
-      modules: modules || {},
+      modules: targetModules,
       loader_config_id: validConfigId,
       watermark_text: watermark_text || name,
       show_watermark: show_watermark !== false,
@@ -74,9 +109,15 @@ export async function POST(req: NextRequest) {
       github_auto_pull: body.github_auto_pull === true,
       github_last_commit: body.github_last_commit || null,
       github_last_pulled_at: body.github_last_pulled_at || null,
+      is_obfuscated: true,
+      obfuscated_at: new Date().toISOString(),
+      obfuscation_stats: stats,
+      vm_preset: vmPreset,
     });
 
-    return NextResponse.json({ success: true, script });
+    await dbService.saveProtectedPayload(cleanSlug, obfResult.output, stats);
+
+    return NextResponse.json({ success: true, script, stats });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Error saving script";
     return NextResponse.json({ error: errorMsg }, { status: 500 });
@@ -84,7 +125,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 
@@ -128,6 +169,39 @@ export async function PATCH(req: NextRequest) {
       targetEntryFile = Object.keys(updatedModules)[0] || "init.lua";
     }
 
+    // If modules or files changed, automatically re-bundle and re-obfuscate
+    let reobfStats = existing.obfuscation_stats;
+    if (body.modules || body.file_content || body.action === "obfuscate") {
+      try {
+        let bundledCode: string;
+        if (Object.keys(updatedModules).length === 1 && (updatedModules[targetEntryFile] || Object.values(updatedModules)[0])) {
+          bundledCode = updatedModules[targetEntryFile] || (Object.values(updatedModules)[0] as string);
+        } else {
+          bundledCode = bundleModules({ entryFile: targetEntryFile, files: updatedModules });
+        }
+        const vmPreset = body.preset || existing.vm_preset || "balanced";
+        const obfResult = await obfuscateLuauVM(bundledCode, { preset: vmPreset });
+        if (obfResult.ok) {
+          const verifyCheck = verifyLuauBytecode(obfResult.output);
+          if (verifyCheck.ok) {
+            const rawBytes = Buffer.byteLength(bundledCode, "utf8");
+            const outBytes = Buffer.byteLength(obfResult.output, "utf8");
+            reobfStats = {
+              inputSize: rawBytes,
+              outputSize: outBytes,
+              time: obfResult.stats?.time || 0,
+              expansionRatio: Number((outBytes / Math.max(1, rawBytes)).toFixed(2)),
+              preset: vmPreset,
+              layers: obfResult.stats?.layers || [],
+            };
+            await dbService.saveProtectedPayload(existing.slug, obfResult.output, reobfStats);
+          }
+        }
+      } catch (obfErr) {
+        console.error("Re-obfuscation error on PATCH:", obfErr);
+      }
+    }
+
     // Save and ALWAYS lock slug so the loadstring is never reset
     const updatedScript = await dbService.saveScript({
       ...existing,
@@ -150,6 +224,10 @@ export async function PATCH(req: NextRequest) {
       github_auto_pull: body.github_auto_pull !== undefined ? body.github_auto_pull : existing.github_auto_pull,
       github_last_commit: body.github_last_commit !== undefined ? body.github_last_commit : existing.github_last_commit,
       github_last_pulled_at: body.github_last_pulled_at !== undefined ? body.github_last_pulled_at : existing.github_last_pulled_at,
+      is_obfuscated: true,
+      obfuscated_at: new Date().toISOString(),
+      obfuscation_stats: reobfStats,
+      vm_preset: body.preset || existing.vm_preset || "balanced",
     });
 
     return NextResponse.json({
@@ -164,7 +242,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 

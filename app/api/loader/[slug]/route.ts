@@ -5,11 +5,16 @@ import { bundleModularScript } from "@/lib/module-bundler";
 import { getClientIp } from "@/lib/ip";
 import { wrapPolymorphicLuau } from "@/lib/polymorphic";
 import { syncScriptFromGitHub } from "@/lib/github-sync";
+import { obfuscateLuauVM, verifyLuauBytecode } from "@/lib/obfuscator";
 
 // In-memory sliding window rate limiter
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 20; // Max requests per window
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 60 seconds
+
+// In-memory Stage 0 VM cache to deliver < 2ms responses without repeated compilations
+const stage0VmCache = new Map<string, { payload: string; cachedAt: number }>();
+const STAGE0_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -313,9 +318,9 @@ function renderProtectedPage(slug: string, scriptName: string): string {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
-  const { slug } = params;
+  const { slug } = await params;
   const clientIp = getClientIp(req);
   const userAgent = (req.headers.get("user-agent") || "").toLowerCase();
 
@@ -433,11 +438,28 @@ warn("[AERO AUTH] Script '${slug}' is currently under maintenance: ${safeMsg}")`
       failure_reason: null,
     }).catch(() => {});
 
-    const directPayload = bundleModularScript({
-      entryFile: script.entry_file || "init.lua",
-      files: script.modules || {},
-    });
-    return new NextResponse(wrapPolymorphicLuau(directPayload), {
+    // Deliver pre-compiled VM protected payload for Direct Run mode
+    let directPayload = await dbService.getProtectedPayload(script.slug);
+    if (!directPayload) {
+      const bundled = bundleModularScript({
+        entryFile: script.entry_file || "init.lua",
+        files: script.modules || {},
+      });
+      try {
+        const vmPreset = (script.vm_preset === "maximum" || script.vm_preset === "ultra" || script.vm_preset === "debug") ? script.vm_preset : "balanced";
+        const obf = await obfuscateLuauVM(bundled, { preset: vmPreset });
+        if (obf.ok) {
+          directPayload = obf.output;
+          await dbService.saveProtectedPayload(script.slug, obf.output, obf.stats);
+        } else {
+          directPayload = wrapPolymorphicLuau(bundled);
+        }
+      } catch {
+        directPayload = wrapPolymorphicLuau(bundled);
+      }
+    }
+
+    return new NextResponse(directPayload, {
       status: 200,
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
@@ -481,7 +503,7 @@ local SCRIPT_SLUG = "${slug}"
 local function sampleBaselineSig()
     local sig = ""
     pcall(function()
-        if type(debug) == "table" and type(debug.info) == "function" then
+        if type(debug) == "table" and type(debug.info) == "function" and type(loadstring) == "function" then
             sig = tostring(debug.info(loadstring, "s"))
         end
     end)
@@ -494,18 +516,20 @@ local function scanEnvironment(baselineSig)
     local hardFlags = {}
     pcall(function()
         -- Check A: __namecall replaced with Lua closure AND __index still native C = active spy
-        local gm = getrawmetatable and getrawmetatable(game)
-        if gm then
-            local nc = rawget(gm, "__namecall")
-            if nc ~= nil and islclosure and islclosure(nc) then
-                local idx = rawget(gm, "__index")
-                if idx and islclosure and not islclosure(idx) then
-                    table.insert(hardFlags, "namecall_spy_active")
+        if type(getrawmetatable) == "function" then
+            local gm = getrawmetatable(game)
+            if type(gm) == "table" then
+                local nc = rawget(gm, "__namecall")
+                if nc ~= nil and type(islclosure) == "function" and islclosure(nc) then
+                    local idx = rawget(gm, "__index")
+                    if idx and not islclosure(idx) then
+                        table.insert(hardFlags, "namecall_spy_active")
+                    end
                 end
             end
         end
         -- Check B: loadstring replaced mid-session (deviates from boot baseline)
-        if type(loadstring) == "function" and islclosure and iscclosure then
+        if type(loadstring) == "function" and type(islclosure) == "function" and type(iscclosure) == "function" then
             if islclosure(loadstring) and not iscclosure(loadstring) then
                 local currentSig = ""
                 pcall(function()
@@ -521,10 +545,12 @@ local function scanEnvironment(baselineSig)
         -- Check C: Known ACTIVE spy tool instances only (NOT standard executor APIs)
         local activeSpyInstances = {"SimpleSpy", "Hydroxide", "GGSpy", "seerspy", "rrspy"}
         local genv = (type(getgenv) == "function" and getgenv()) or _G
-        for _, name in ipairs(activeSpyInstances) do
-            local val = genv[name]
-            if val ~= nil and (type(val) == "table" or type(val) == "function") then
-                table.insert(hardFlags, "active_spy_" .. name)
+        if type(genv) == "table" then
+            for _, name in ipairs(activeSpyInstances) do
+                local val = rawget(genv, name) or genv[name]
+                if val ~= nil and (type(val) == "table" or type(val) == "function") then
+                    table.insert(hardFlags, "active_spy_" .. name)
+                end
             end
         end
     end)
@@ -532,22 +558,36 @@ local function scanEnvironment(baselineSig)
 end
 
 local function executePreFlight()
-    local getReq = (syn and syn.request) or (http and http.request) or http_request or request or (fluxus and fluxus.request)
+    local getReq = nil
+    if type(syn) == "table" and type(syn.request) == "function" then
+        getReq = syn.request
+    elseif type(http) == "table" and type(http.request) == "function" then
+        getReq = http.request
+    elseif type(http_request) == "function" then
+        getReq = http_request
+    elseif type(request) == "function" then
+        getReq = request
+    elseif type(fluxus) == "table" and type(fluxus.request) == "function" then
+        getReq = fluxus.request
+    end
+
     local challengeData = nil
     pcall(function()
         local raw = game:HttpGet(BASE_URL .. "/api/auth/probe?slug=" .. SCRIPT_SLUG .. "&_t=" .. os.time())
-        challengeData = HttpService:JSONDecode(raw)
+        if type(raw) == "string" and #raw > 0 then
+            challengeData = HttpService:JSONDecode(raw)
+        end
     end)
     
-    if not challengeData or not challengeData.session_id or not challengeData.challenges then
+    if type(challengeData) ~= "table" or not challengeData.session_id or not challengeData.challenges then
         return
     end
     
     local solutions = {}
     for _, ch in ipairs(challengeData.challenges) do
         if ch.type == "arithmetic" then
-            local seed = ch.seed
-            local rounds = ch.rounds
+            local seed = tonumber(ch.seed) or 0
+            local rounds = tonumber(ch.rounds) or 1
             local acc = bit32.bxor(seed, 0x5F3759DF)
             for i = 1, rounds do
                 acc = bit32.bxor(bit32.band(acc * 31, 0xFFFFFFFF), bit32.band(i * 17, 0xFFFFFFFF))
@@ -562,53 +602,99 @@ local function executePreFlight()
     local payload = HttpService:JSONEncode({
         session_id = challengeData.session_id,
         slug = SCRIPT_SLUG,
-        hwid = (type(gethwid) == "function" and gethwid()) or "",
+        hwid = (type(gethwid) == "function" and tostring(gethwid())) or "",
         solutions = solutions,
         tamper_flags = hardFlags,
         c_signature = baselineSig,
     })
     
     local respBody = nil
-    if getReq then
-        local res = getReq({
-            Url = BASE_URL .. "/api/auth/probe",
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = payload,
-        })
-        if res and (res.StatusCode == 200 or res.Status == 200) then
-            respBody = res.Body
-        end
-    else
+    if type(getReq) == "function" then
+        pcall(function()
+            local res = getReq({
+                Url = BASE_URL .. "/api/auth/probe",
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = payload,
+            })
+            if type(res) == "table" and (res.StatusCode == 200 or res.Status == 200) then
+                respBody = res.Body
+            end
+        end)
+    end
+    
+    if not respBody then
         pcall(function()
             respBody = game:HttpPost(BASE_URL .. "/api/auth/probe", payload, "application/json")
         end)
     end
     
-    if not respBody then return end
+    if not respBody or type(respBody) ~= "string" then return end
     
     local verified = nil
     pcall(function()
         verified = HttpService:JSONDecode(respBody)
     end)
     
-    if verified and verified.success and verified.loader_payload then
+    if type(verified) == "table" and verified.success and verified.loader_payload then
         if verified.gateway_token then
-            _G.__AERO_GATEWAY_TOKEN = verified.gateway_token
+            pcall(function() _G.__AERO_GATEWAY_TOKEN = verified.gateway_token end)
         end
-        local fn, err = loadstring(verified.loader_payload)
-        if fn then
-            task.spawn(fn)
+        local fn, err = nil, nil
+        pcall(function()
+            if type(loadstring) == "function" then
+                fn, err = loadstring(verified.loader_payload)
+            end
+        end)
+        if type(fn) == "function" then
+            if type(task) == "table" and type(task.spawn) == "function" then
+                task.spawn(fn)
+            else
+                coroutine.wrap(fn)()
+            end
         end
     end
 end
 
-task.spawn(executePreFlight)
+pcall(function()
+    if type(task) == "table" and type(task.spawn) == "function" then
+        task.spawn(function()
+            pcall(executePreFlight)
+        end)
+    else
+        pcall(executePreFlight)
+    end
+end)
 `;
 
-  const polymorphicLoader = wrapPolymorphicLuau(stage0Stub);
+  // Protect Stage 0 Pre-Flight Integrity Guard with Luau VM Obfuscation
+  // Cached in-memory per baseUrl:slug to ensure < 2ms instant response time
+  const cacheKey = `${baseUrl}:${slug}`;
+  const cached = stage0VmCache.get(cacheKey);
+  let finalStage0Payload: string;
 
-  return new NextResponse(polymorphicLoader, {
+  if (cached && Date.now() - cached.cachedAt < STAGE0_CACHE_TTL_MS) {
+    finalStage0Payload = cached.payload;
+  } else {
+    try {
+      const vmResult = await obfuscateLuauVM(stage0Stub, { preset: "balanced" });
+      if (vmResult.ok) {
+        const verify = verifyLuauBytecode(vmResult.output);
+        if (verify.ok) {
+          finalStage0Payload = vmResult.output;
+          stage0VmCache.set(cacheKey, { payload: finalStage0Payload, cachedAt: Date.now() });
+        } else {
+          finalStage0Payload = wrapPolymorphicLuau(stage0Stub);
+        }
+      } else {
+        finalStage0Payload = wrapPolymorphicLuau(stage0Stub);
+      }
+    } catch {
+      finalStage0Payload = wrapPolymorphicLuau(stage0Stub);
+    }
+  }
+
+  return new NextResponse(finalStage0Payload, {
     status: 200,
     headers: {
       "Content-Type": "text/plain; charset=utf-8",

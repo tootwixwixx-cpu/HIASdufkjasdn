@@ -1,6 +1,7 @@
 // app/api/chatroom/blacklist/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
+import { isAuthenticated } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!(await isAuthenticated(req))) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const body = await req.json();
 
     let wordsToAdd: string[] = [];
@@ -51,6 +55,9 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    if (!(await isAuthenticated(req))) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const { searchParams } = new URL(req.url);
     const word = searchParams.get("word");
     if (!word) {

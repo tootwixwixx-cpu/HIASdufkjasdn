@@ -1,26 +1,41 @@
 // app/page.tsx
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-import {
-  Key,
-  ShieldCheck,
-  Cpu,
-  Shield,
-  Lock,
-  Terminal,
-  ChevronRight,
-  ExternalLink,
-  Copy,
-  Check,
-  FileCode,
-  ArrowRight,
-  Activity,
-} from "lucide-react";
+import { Key, ShieldCheck, Cpu, Lock, Terminal, ChevronRight, ExternalLink, FileCode, Activity, Check } from "lucide-react";
 import { dbService } from "@/lib/store";
 import ClaimScriptModal, { ScriptSummary } from "@/components/ClaimScriptModal";
 import InteractiveTelemetryDemo from "@/components/InteractiveTelemetryDemo";
+import { Badge, Card, LogoMark, buttonClasses } from "@/components/ui";
+import { cn, focusRing } from "@/lib/utils";
 
 export const revalidate = 0;
+
+const FEATURES = [
+  {
+    icon: Key,
+    title: "Single-device network binding",
+    body: "Every key is cryptographically bound to the claimant network IP during generation. If another user on a different network attempts execution with the same key, authentication is rejected instantly.",
+    note: "VPN and datacenter proxy filtering",
+  },
+  {
+    icon: Cpu,
+    title: "In-game UI loader",
+    body: "The universal loadstring draws a verification interface inside the Roblox client. Users paste their key once; later launches authenticate automatically against a locally cached token.",
+    note: "Works on Windows, Android, and macOS executors",
+  },
+  {
+    icon: Activity,
+    title: "1-second anti-tamper heartbeat",
+    body: "The client thread keeps a handshake going every 1000ms. Tampering with global metatables, detouring HTTP requests, or attaching debuggers halts the heartbeat and drops script memory.",
+    note: "Sub-15ms round-trip validation",
+  },
+  {
+    icon: Terminal,
+    title: "Modular memory streaming",
+    body: "Scripts never save raw Lua payloads to player storage. Code chunks stream encrypted over HTTPS straight into executor memory, which defeats static file dumps.",
+    note: "Remote script updates and hot-patching",
+  },
+] as const;
 
 export default async function HomePage() {
   const [settings, allScripts] = await Promise.all([
@@ -46,251 +61,176 @@ export default async function HomePage() {
       : "https://discord.gg/NdrTc27GxT";
 
   return (
-    <div className="min-h-screen flex flex-col bg-obsidian-950 text-zinc-100 selection:bg-white selection:text-black">
+    <div className="flex min-h-screen flex-col bg-canvas text-fg">
       <Navbar scripts={activeScripts} discordUrl={discordUrl} />
 
-      {/* Hero Section */}
-      <section className="relative pt-20 pb-16 sm:pt-28 sm:pb-24 px-4 sm:px-6 lg:px-8 border-b border-obsidian-700/80 bg-dot-matrix overflow-hidden">
-        {/* Subtle dark radial vignette */}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-obsidian-950/60 to-obsidian-950 pointer-events-none" />
+      {/* Hero: the live telemetry demo is the centerpiece */}
+      <section className="relative overflow-hidden border-b border-line bg-dot-matrix px-4 pb-16 pt-16 sm:px-6 sm:pb-24 sm:pt-24">
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-b from-canvas/40 via-canvas/70 to-canvas" />
 
-        <div className="relative z-10 max-w-4xl mx-auto text-center space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-obsidian-700 bg-obsidian-850 px-3.5 py-1 text-xs font-mono text-zinc-400 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>ATOMPROTECT // SCRIPT ACCESS GATEWAY & TELEMETRY</span>
-          </div>
-
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
-            Single-Device IP Whitelisting & Live Heartbeat Protection
-          </h1>
-
-          <p className="text-sm sm:text-base text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-            Distribute Roblox scripts securely. Generate license keys bound to claimant network IPs, verify players through an in-game UI loader, and monitor sessions in real time.
-          </p>
-
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <ClaimScriptModal
-              scripts={activeScripts}
-              buttonText="Claim License Key"
-              buttonClassName="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-xs sm:text-sm font-bold text-black hover:bg-zinc-200 transition-all active:scale-95 shadow-lg shadow-white/5"
-            />
-
-            <a
-              href={discordUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl border border-obsidian-700 bg-obsidian-850 px-5 py-3 text-xs sm:text-sm font-medium text-zinc-300 hover:text-white hover:bg-obsidian-800 transition-colors"
-            >
-              <span>Join Discord</span>
-              <ExternalLink className="w-3.5 h-3.5 text-zinc-500" />
-            </a>
-
-            <a
-              href="#scripts"
-              className="inline-flex items-center gap-2 rounded-xl border border-obsidian-700 bg-obsidian-850 px-5 py-3 text-xs sm:text-sm font-medium text-zinc-300 hover:text-white hover:bg-obsidian-800 transition-colors"
-            >
-              <FileCode className="w-4 h-4 text-zinc-400" />
-              <span>Available Scripts</span>
-            </a>
-          </div>
-        </div>
-
-        {/* Live Interactive Telemetry Showcase inside Hero Flow */}
-        <div id="telemetry" className="relative z-10 mt-14 max-w-4xl mx-auto">
-          <InteractiveTelemetryDemo />
-        </div>
-      </section>
-
-      {/* Bento Grid Architecture Features */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full">
-        <div className="mb-10 text-center sm:text-left">
-          <div className="inline-flex items-center gap-2 rounded-full border border-obsidian-700 bg-obsidian-850 px-3 py-1 text-xs font-mono text-zinc-400 mb-3">
-            <Shield className="w-3.5 h-3.5 text-emerald-400" />
-            <span>CORE ARCHITECTURE</span>
-          </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Built for Zero-Leak Script Execution
-          </h2>
-          <p className="text-sm text-zinc-400 mt-2 max-w-2xl">
-            Four defensive layers protect script source code from being dumped, shared across networks, or cracked.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-6 rounded-2xl bg-obsidian-900 border border-obsidian-700 hover:border-zinc-500 transition-colors space-y-3">
-            <div className="w-9 h-9 rounded-xl bg-obsidian-800 border border-obsidian-700 text-zinc-200 flex items-center justify-center font-mono">
-              <Key className="w-4 h-4" />
-            </div>
-            <h3 className="text-base font-bold text-white">Single-Device Network Binding</h3>
-            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-              Every key is cryptographically bound to the claimant network IP during generation. If another user on a different network attempts execution with the same key, authentication is rejected instantly.
+        <div className="relative z-10 mx-auto max-w-5xl">
+          <div className="max-w-3xl">
+            <h1 className="text-balance text-display font-semibold text-fg sm:text-hero">
+              Single-device IP whitelisting and live heartbeat protection
+            </h1>
+            <p className="mt-5 max-w-2xl text-body text-fg-muted sm:text-[16px] sm:leading-[26px]">
+              Distribute Roblox scripts securely. Generate license keys bound to claimant network IPs, verify players
+              through an in-game UI loader, and monitor sessions in real time.
             </p>
-            <div className="pt-2 text-[11px] font-mono text-zinc-500 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span>VPN & Datacenter Proxy Filtering Active</span>
-            </div>
-          </div>
 
-          <div className="p-6 rounded-2xl bg-obsidian-900 border border-obsidian-700 hover:border-zinc-500 transition-colors space-y-3">
-            <div className="w-9 h-9 rounded-xl bg-obsidian-800 border border-obsidian-700 text-zinc-200 flex items-center justify-center font-mono">
-              <Cpu className="w-4 h-4" />
-            </div>
-            <h3 className="text-base font-bold text-white">In-Game UI Loader</h3>
-            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-              The universal loadstring draws a sleek verification interface inside the Roblox client. Users paste their key once; subsequent launches automatically authenticate against local cached tokens.
-            </p>
-            <div className="pt-2 text-[11px] font-mono text-zinc-500 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              <span>Compatible across Windows, Android, and macOS</span>
-            </div>
-          </div>
-
-          <div className="p-6 rounded-2xl bg-obsidian-900 border border-obsidian-700 hover:border-zinc-500 transition-colors space-y-3">
-            <div className="w-9 h-9 rounded-xl bg-obsidian-800 border border-obsidian-700 text-zinc-200 flex items-center justify-center font-mono">
-              <Activity className="w-4 h-4" />
-            </div>
-            <h3 className="text-base font-bold text-white">1-Second Anti-Tamper Heartbeat</h3>
-            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-              The client thread maintains an ongoing handshake every 1000ms. Tampering with global metatables, detouring HTTP requests, or attaching debuggers halts heartbeat delivery and drops script memory.
-            </p>
-            <div className="pt-2 text-[11px] font-mono text-zinc-500 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span>Sub-15ms Roundtrip Validation Ping</span>
-            </div>
-          </div>
-
-          <div className="p-6 rounded-2xl bg-obsidian-900 border border-obsidian-700 hover:border-zinc-500 transition-colors space-y-3">
-            <div className="w-9 h-9 rounded-xl bg-obsidian-800 border border-obsidian-700 text-zinc-200 flex items-center justify-center font-mono">
-              <Terminal className="w-4 h-4" />
-            </div>
-            <h3 className="text-base font-bold text-white">Modular Memory Streaming</h3>
-            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-              Scripts do not save raw Lua payloads to player storage. Code chunks stream encrypted over HTTPS straight into executor memory, mitigating static file dumps.
-            </p>
-            <div className="pt-2 text-[11px] font-mono text-zinc-500 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-              <span>Instant Remote Script Updates & Hot-Patching</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Available Protected Scripts Hub */}
-      {activeScripts.length > 0 && (
-        <section id="scripts" className="py-16 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full border-t border-obsidian-700/80">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-obsidian-700 bg-obsidian-850 px-3 py-1 text-xs font-mono text-zinc-400 mb-2">
-                <Terminal className="w-3.5 h-3.5 text-zinc-400" />
-                <span>SCRIPTS VAULT</span>
-              </div>
-              <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                Active Protected Scripts ({activeScripts.length})
-              </h2>
-            </div>
-            <p className="text-xs font-mono text-zinc-500">
-              Select a script below to claim an authorized key
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {activeScripts.map((s) => (
-              <div
-                key={s.id}
-                className="p-5 rounded-2xl border border-obsidian-700 bg-obsidian-900 hover:border-zinc-500 transition-all flex flex-col justify-between group space-y-4"
+            <div className="mt-8 flex flex-wrap items-center gap-2.5">
+              <ClaimScriptModal scripts={activeScripts} buttonText="Claim license key" variant="primary" size="lg" />
+              <a
+                href={discordUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={buttonClasses({ variant: "secondary", size: "lg" })}
               >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-base font-bold text-white group-hover:text-zinc-200 transition-colors">
-                      {s.name}
-                    </span>
-                    {s.use_auth !== false ? (
-                      <span className="text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                        IP Locked
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-mono font-semibold bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">
-                        Direct
-                      </span>
-                    )}
-                  </div>
+                <span>Join Discord</span>
+                <ExternalLink className="text-fg-subtle" />
+              </a>
+              <a href="#scripts" className={buttonClasses({ variant: "ghost", size: "lg" })}>
+                <FileCode />
+                <span>Available scripts</span>
+              </a>
+            </div>
+          </div>
 
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    {s.use_auth !== false
-                      ? "Requires authorized license key bound to claimant IP."
-                      : "Direct execution without license verification."}
-                  </p>
+          <div id="telemetry" className="mt-14 scroll-mt-20">
+            <InteractiveTelemetryDemo />
+          </div>
+        </div>
+      </section>
 
-                  <div className="rounded-lg bg-obsidian-800 border border-obsidian-700/80 p-2 font-mono text-[11px] text-zinc-400 flex items-center justify-between gap-2">
-                    <span className="truncate">
-                      loadstring(game:HttpGet(&quot;.../api/loader/{s.slug}&quot;))()
-                    </span>
-                    <span className="text-[10px] text-zinc-500 flex-shrink-0">
-                      /{s.slug}
-                    </span>
-                  </div>
-                </div>
+      {/* Capabilities */}
+      <section id="features" className="mx-auto w-full max-w-5xl scroll-mt-16 px-4 py-20 sm:px-6">
+        <div className="mb-8 max-w-2xl">
+          <h2 className="text-display font-semibold text-fg">Built for zero-leak script execution</h2>
+          <p className="mt-2 text-body text-fg-muted">
+            Four defensive layers keep script source from being dumped, shared across networks, or cracked.
+          </p>
+        </div>
 
-                <div className="pt-1 flex items-center justify-between border-t border-obsidian-750">
-                  <span className="text-[11px] font-mono text-zinc-500">
-                    {s.watermark_text || "AeroAuth Protected"}
-                  </span>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {FEATURES.map(({ icon: Icon, title, body, note }) => (
+            <Card key={title} className="flex flex-col p-5">
+              <span className="flex size-9 items-center justify-center rounded-md border border-line bg-surface text-accent-text">
+                <Icon className="size-4" />
+              </span>
+              <h3 className="mt-4 text-title font-semibold text-fg">{title}</h3>
+              <p className="mt-1.5 flex-1 text-body-sm text-fg-muted">{body}</p>
+              <p className="mt-4 flex items-center gap-1.5 border-t border-line-subtle pt-3 text-caption text-fg-subtle">
+                <Check className="size-3.5 text-success-text" />
+                {note}
+              </p>
+            </Card>
+          ))}
+        </div>
+      </section>
 
-                  <Link
-                    href={`/claim?script=${encodeURIComponent(s.slug)}`}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-obsidian-800 hover:bg-white hover:text-black border border-obsidian-700 px-3 py-1.5 rounded-xl transition-all"
-                  >
-                    <span>Claim Key</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
+      {/* Scripts */}
+      {activeScripts.length > 0 && (
+        <section id="scripts" className="w-full scroll-mt-16 border-t border-line">
+          <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+            <div className="mb-6 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-heading font-semibold text-fg">Protected scripts</h2>
+                <Badge mono>{activeScripts.length}</Badge>
               </div>
-            ))}
+              <p className="text-body-sm text-fg-subtle">Pick a script to claim a key for it.</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {activeScripts.map((s) => (
+                <Card key={s.id} className="flex flex-col">
+                  <div className="flex-1 space-y-2.5 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="truncate text-title font-semibold text-fg">{s.name}</h3>
+                      {s.use_auth !== false ? (
+                        <Badge tone="accent">
+                          <Lock className="size-3" />
+                          IP locked
+                        </Badge>
+                      ) : (
+                        <Badge>Direct</Badge>
+                      )}
+                    </div>
+
+                    <p className="text-body-sm text-fg-muted">
+                      {s.use_auth !== false
+                        ? "Requires a license key bound to the claimant's IP."
+                        : "Runs directly without license verification."}
+                    </p>
+
+                    <div className="flex items-center justify-between gap-2 rounded-md border border-line-subtle bg-canvas px-2.5 py-2 font-data text-caption text-fg-muted">
+                      <span className="truncate">loadstring(game:HttpGet(&quot;.../api/loader/{s.slug}&quot;))()</span>
+                      <span className="shrink-0 text-fg-subtle">/{s.slug}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-2.5">
+                    <span className="truncate text-caption text-fg-subtle">{s.watermark_text || "AtomProtect"}</span>
+                    <Link
+                      href={`/claim?script=${encodeURIComponent(s.slug)}`}
+                      className={buttonClasses({ variant: "secondary", size: "sm" })}
+                    >
+                      <span>Claim key</span>
+                      <ChevronRight />
+                    </Link>
+                  </div>
+                </Card>
+              ))}
+            </div>
           </div>
         </section>
       )}
 
-      {/* Terms of Service Section */}
-      <section className="py-14 px-4 sm:px-6 lg:px-8 border-t border-obsidian-700/80 bg-obsidian-900 mt-auto">
-        <div className="max-w-4xl mx-auto space-y-4">
+      {/* Terms of service */}
+      <section className="mt-auto border-t border-line bg-surface px-4 py-14 sm:px-6">
+        <div className="mx-auto max-w-5xl">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-zinc-400" />
-            <h2 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider font-mono">
-              Terms of Service & Usage Policy
-            </h2>
+            <ShieldCheck className="size-4 text-fg-subtle" />
+            <h2 className="text-title font-semibold text-fg">Terms of service and usage policy</h2>
           </div>
 
-          <div className="rounded-xl border border-obsidian-700 bg-obsidian-950 p-4 text-xs text-zinc-300 font-mono whitespace-pre-line leading-relaxed">
-            {settings.tos_content || "Keys are bound to claimant IP addresses. VPNs and proxies are blocked. Multi-device key sharing results in automatic revocation."}
+          <div className="mt-4 max-w-3xl whitespace-pre-line rounded-lg border border-line bg-canvas p-4 text-body-sm text-fg-muted">
+            {settings.tos_content ||
+              "Keys are bound to claimant IP addresses. VPNs and proxies are blocked. Multi-device key sharing results in automatic revocation."}
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 text-[11px] font-mono text-zinc-500 pt-1">
-            <span>• Keys bound to network IP</span>
-            <span>• Commercial VPN & Proxy traffic blocked</span>
-            <span>• One active key per IP address</span>
-          </div>
+          <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 text-caption text-fg-subtle">
+            <li>Keys are bound to your network IP</li>
+            <li>Commercial VPN and proxy traffic is blocked</li>
+            <li>One active key per IP address</li>
+          </ul>
         </div>
       </section>
 
-      {/* Clean Footer with hidden Admin link */}
-      <footer className="py-5 px-6 border-t border-obsidian-800 bg-obsidian-950 flex items-center justify-between text-xs font-mono text-zinc-500">
-        <span>&copy; {new Date().getFullYear()} AtomProtect. All rights reserved.</span>
-        <div className="flex items-center gap-4">
-          <a
-            href={discordUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="hover:text-zinc-300 transition-colors"
-          >
-            Community Discord
-          </a>
-          <Link
-            href="/login"
-            className="text-zinc-700 hover:text-zinc-400 transition-colors p-1"
-            title="Staff Console"
-          >
-            <Lock className="w-3 h-3" />
-          </Link>
+      {/* Footer (lock icon is the staff console link) */}
+      <footer className="border-t border-line bg-canvas px-4 py-5 sm:px-6">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 text-caption text-fg-subtle">
+          <span className="flex items-center gap-2">
+            <LogoMark size={14} tone="mono" className="text-fg-subtle" />
+            &copy; {new Date().getFullYear()} AtomProtect. All rights reserved.
+          </span>
+          <div className="flex items-center gap-3">
+            <a
+              href={discordUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={cn("rounded-sm transition-colors hover:text-fg", focusRing)}
+            >
+              Community Discord
+            </a>
+            <Link
+              href="/login"
+              className={cn("rounded-sm p-1 text-fg-disabled transition-colors hover:text-fg-muted", focusRing)}
+              title="Staff console"
+              aria-label="Staff console"
+            >
+              <Lock className="size-3" />
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

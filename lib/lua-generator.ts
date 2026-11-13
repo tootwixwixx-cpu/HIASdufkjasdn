@@ -205,7 +205,38 @@ local BASE_URL = "${baseUrl}"
 local SCRIPT_SLUG = "${scriptSlug}"
 
 -- Executor HTTP compatibility helper
-local httpRequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+local httpRequest = nil
+if type(syn) == "table" and type(syn.request) == "function" then
+    httpRequest = syn.request
+elseif type(http) == "table" and type(http.request) == "function" then
+    httpRequest = http.request
+elseif type(http_request) == "function" then
+    httpRequest = http_request
+elseif type(request) == "function" then
+    httpRequest = request
+elseif type(fluxus) == "table" and type(fluxus.request) == "function" then
+    httpRequest = fluxus.request
+end
+
+if not httpRequest and (type(game) == "table" or typeof(game) == "Instance") then
+    httpRequest = function(opts)
+        local method = (opts and opts.Method) or "GET"
+        local url = opts and opts.Url
+        local body = opts and opts.Body
+        local resBody = nil
+        local ok = false
+        if method == "GET" and type(game.HttpGet) == "function" then
+            ok, resBody = pcall(function() return game:HttpGet(url) end)
+        elseif method == "POST" and type(game.HttpPost) == "function" then
+            ok, resBody = pcall(function() return game:HttpPost(url, body or "", opts.Headers and opts.Headers["Content-Type"] or "application/json") end)
+        end
+        if ok and resBody then
+            return { StatusCode = 200, Status = 200, Body = resBody }
+        end
+        return nil
+    end
+end
+
 if not httpRequest then
     safeKick("[${safeBrandName}] Your executor does not support HTTP requests.")
     return

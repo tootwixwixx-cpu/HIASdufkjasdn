@@ -29,6 +29,19 @@ export function normalizeIp(ip: string | null | undefined): string {
   return clean;
 }
 
+// SECURITY: x-forwarded-for / cf-connecting-ip / x-real-ip are plain request headers —
+// if the app is reachable directly (no reverse proxy/CDN actually stripping and
+// re-setting them), a client can set any value it likes and get a fresh, never-banned
+// "IP identity" on every request, defeating IP bans, per-IP key binding, brute-force
+// lockouts, and checkpoint anti-sharing in one move. They are now only trusted when
+// explicitly enabled via TRUSTED_PROXY=true — set this ONLY when the app genuinely sits
+// behind an infrastructure component (Nginx, Caddy, Cloudflare, etc.) that you've
+// configured to overwrite/strip these headers from the client before they reach Node.
+// `x-vercel-forwarded-for` is trusted automatically instead, because `VERCEL=1` is set
+// by the Vercel platform itself in its own runtime and can't be influenced by a request.
+const TRUST_PROXY_HEADERS = process.env.TRUSTED_PROXY === "true";
+const ON_VERCEL = process.env.VERCEL === "1";
+
 /**
  * Resolves client IP address securely, prioritizing trusted server connection
  * socket and edge proxy headers ahead of spoofable headers.
@@ -41,33 +54,36 @@ export function getClientIp(req: NextRequest): string {
     if (isValidIp(norm)) return norm;
   }
 
-  // 2. Vercel Edge Server Header (set by Vercel edge network)
-  const vercelIp = req.headers.get("x-vercel-forwarded-for");
-  if (vercelIp && vercelIp.trim()) {
-    const firstIp = normalizeIp(vercelIp.split(",")[0].trim());
-    if (isValidIp(firstIp)) return firstIp;
+  // 2. Vercel Edge Server Header (set by Vercel's own edge network, not the client)
+  if (ON_VERCEL) {
+    const vercelIp = req.headers.get("x-vercel-forwarded-for");
+    if (vercelIp && vercelIp.trim()) {
+      const firstIp = normalizeIp(vercelIp.split(",")[0].trim());
+      if (isValidIp(firstIp)) return firstIp;
+    }
   }
 
-  // 3. Cloudflare connecting IP (trusted edge network header when behind CF)
-  const cfIp = req.headers.get("cf-connecting-ip");
-  if (cfIp && cfIp.trim()) {
-    const normalized = normalizeIp(cfIp.trim());
-    if (isValidIp(normalized)) return normalized;
-  }
+  // 3-5. Only trust these when TRUSTED_PROXY=true confirms something ahead of this
+  // process actually controls/overwrites them before a client request reaches here.
+  if (TRUST_PROXY_HEADERS) {
+    const cfIp = req.headers.get("cf-connecting-ip");
+    if (cfIp && cfIp.trim()) {
+      const normalized = normalizeIp(cfIp.trim());
+      if (isValidIp(normalized)) return normalized;
+    }
 
-  // 4. Real-IP from trusted reverse proxy (e.g. Nginx, Caddy)
-  const realIp = req.headers.get("x-real-ip");
-  if (realIp && realIp.trim()) {
-    const normalized = normalizeIp(realIp.trim());
-    if (isValidIp(normalized)) return normalized;
-  }
+    const realIp = req.headers.get("x-real-ip");
+    if (realIp && realIp.trim()) {
+      const normalized = normalizeIp(realIp.trim());
+      if (isValidIp(normalized)) return normalized;
+    }
 
-  // 5. X-Forwarded-For header (leftmost IP is the original client)
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded && forwarded.trim()) {
-    const firstIp = normalizeIp(forwarded.split(",")[0].trim());
-    if (isValidIp(firstIp)) {
-      return firstIp;
+    const forwarded = req.headers.get("x-forwarded-for");
+    if (forwarded && forwarded.trim()) {
+      const firstIp = normalizeIp(forwarded.split(",")[0].trim());
+      if (isValidIp(firstIp)) {
+        return firstIp;
+      }
     }
   }
 

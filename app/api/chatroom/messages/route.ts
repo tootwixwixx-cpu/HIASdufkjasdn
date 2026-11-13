@@ -1,6 +1,7 @@
 // app/api/chatroom/messages/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
+import { isAuthenticated } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -38,13 +39,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Message text is required" }, { status: 400 });
     }
 
+    // Only an authenticated admin may post with the "dev" badge — otherwise any
+    // player could spoof `isDev: true` and impersonate staff in the public chat.
+    const claimsDev = Boolean(isDev);
+    const isDevVerified = claimsDev && (await isAuthenticated(req));
+    if (claimsDev && !isDevVerified) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const result = await dbService.postChatroomMessage({
       user_id: String(userId || "0"),
       username: String(username || "Anonymous"),
       display_name: displayName ? String(displayName) : undefined,
       avatar_url: avatarUrl ? String(avatarUrl) : undefined,
       message: message.trim(),
-      is_dev: Boolean(isDev),
+      is_dev: isDevVerified,
     });
 
     if (result.rateLimited) {
@@ -82,6 +91,9 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    if (!(await isAuthenticated(req))) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     const all = searchParams.get("all") === "true" || id === "all";

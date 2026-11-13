@@ -1,11 +1,11 @@
-// app/api/settings/route.ts
+﻿// app/api/settings/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
 
 export async function GET() {
   const settings = await dbService.getSettings();
-  const authed = isAuthenticated();
+  const authed = (await isAuthenticated());
 
   // If not authenticated admin, redact sensitive discord tokens and secrets
   if (!authed) {
@@ -23,7 +23,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthenticated()) {
+  if (!(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized. Admin session required." }, { status: 401 });
   }
 

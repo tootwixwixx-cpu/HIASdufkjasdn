@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbService, isStaffReviewKey, type ScriptRecord } from "@/lib/store";
 import { bundleModularScript } from "@/lib/module-bundler";
+import { obfuscateLuauVM, bundleModules } from "@/lib/obfuscator";
+import { wrapPolymorphicLuau } from "@/lib/polymorphic";
 import { syncScriptFromGitHub } from "@/lib/github-sync";
 import { sendExecutionWebhook } from "@/lib/discord-webhook";
 import { getClientIp, normalizeIp, getClientGeo } from "@/lib/ip";
@@ -20,6 +22,31 @@ function isMaliciousScraper(userAgent: string): boolean {
     lower.includes("node-fetch") ||
     lower.includes("axios")
   );
+}
+
+// SECURITY: a User-Agent substring match alone is a weak, trivially-spoofable signal —
+// a real scraper just sets a browser-like UA, while a legitimate tool whose HTTP client
+// happens to default to one of these strings (e.g. an `axios`-based launcher) would
+// otherwise be permanently IP-banned on a single request. Require a few hits within a
+// short window before actually banning; a single hit is just rejected.
+const scraperUaHitMap = new Map<string, { count: number; resetAt: number }>();
+const SCRAPER_UA_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const SCRAPER_UA_BAN_THRESHOLD = 3;
+
+function recordScraperUaHitAndShouldBan(ip: string): boolean {
+  const now = Date.now();
+  if (scraperUaHitMap.size > 5000) {
+    scraperUaHitMap.forEach((v, k) => {
+      if (now > v.resetAt) scraperUaHitMap.delete(k);
+    });
+  }
+  const rec = scraperUaHitMap.get(ip);
+  if (!rec || now > rec.resetAt) {
+    scraperUaHitMap.set(ip, { count: 1, resetAt: now + SCRAPER_UA_WINDOW_MS });
+    return false;
+  }
+  rec.count += 1;
+  return rec.count >= SCRAPER_UA_BAN_THRESHOLD;
 }
 
 /**
@@ -127,10 +154,12 @@ export async function POST(req: NextRequest) {
 
     // 0. Automated Scraper / Bot Tool Blocker
     if (isMaliciousScraper(userAgent)) {
-      await dbService.banIp(
-        clientIp,
-        `Automated Scraper Tool Detected hitting Verify API (${userAgent})`
-      );
+      if (recordScraperUaHitAndShouldBan(clientIp)) {
+        await dbService.banIp(
+          clientIp,
+          `Repeated automated-tool User-Agent hits on Verify API (${SCRAPER_UA_BAN_THRESHOLD}+ within 10min, latest: ${userAgent})`
+        );
+      }
       return NextResponse.json(
         { error: "Access Denied: Automated tools, scrapers, and external HTTP clients are strictly forbidden." },
         { status: 403 }
@@ -580,16 +609,34 @@ export async function POST(req: NextRequest) {
         key_label: keyRecord.notes || "Staff Review Key",
       });
 
-      const rawPayload = bundleModularScript({
-        entryFile: script.entry_file || "init.lua",
-        files: script.modules || {},
-        dynamicStreaming: true,
-        slug: script.slug,
-        sessionToken: staffReview.id,
-        baseUrl,
-        key: (key || keyRecord.key_string || "").trim(),
-        obfuscate: true,
-      });
+      let rawPayload: string = (await dbService.getProtectedPayload(script.slug)) || "";
+      if (!rawPayload) {
+        const bundled = bundleModularScript({
+          entryFile: script.entry_file || "init.lua",
+          files: script.modules || {},
+          dynamicStreaming: true,
+          slug: script.slug,
+          sessionToken: staffReview.id,
+          baseUrl,
+          key: (key || keyRecord.key_string || "").trim(),
+          obfuscate: false,
+        });
+        const obfRes = await obfuscateLuauVM(bundled, { preset: "balanced" });
+        // SECURITY: obfuscateLuauVM never throws -- it returns {ok:false} on any failure
+        // (e.g. the bundled luau-compile.exe binary not being runnable on a non-Windows
+        // host like a Linux/Vercel deployment). This used to fall back to `bundled`, the
+        // RAW UNOBFUSCATED source, which would then be delivered as-is to the client --
+        // completely defeating the obfuscator. Fall back to the lightweight polymorphic
+        // wrapper instead (same safety net probe/route.ts already uses), which at least
+        // isn't plaintext, and log loudly so a broken compiler is visible, not silent.
+        if (obfRes.ok) {
+          rawPayload = obfRes.output;
+        } else {
+          console.error(`[verify] VM obfuscation failed for "${script.slug}", falling back to polymorphic wrap: ${obfRes.error}`);
+          rawPayload = wrapPolymorphicLuau(bundled);
+        }
+        dbService.saveProtectedPayload(script.slug, rawPayload, obfRes.stats).catch(console.error);
+      }
 
       const nonce = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       const secretKey = `${staffReview.id}_${(key || "").trim()}_${nonce}`;
@@ -698,17 +745,30 @@ export async function POST(req: NextRequest) {
       }).catch((e) => console.error("Webhook dispatch error:", e));
     }
 
-    // Assemble protected modular virtual bundle with Dynamic Zero-Knowledge Streaming
-    const rawPayload = bundleModularScript({
-      entryFile: script.entry_file || "init.lua",
-      files: script.modules || {},
-      dynamicStreaming: true,
-      slug: script.slug,
-      sessionToken: session.id,
-      baseUrl,
-      key: (key || keyRecord.key_string || "").trim(),
-      obfuscate: true,
-    });
+    // Instant delivery of pre-obfuscated AtomProtect VM payload
+    let rawPayload: string = (await dbService.getProtectedPayload(script.slug)) || "";
+    if (!rawPayload) {
+      const bundled = bundleModularScript({
+        entryFile: script.entry_file || "init.lua",
+        files: script.modules || {},
+        dynamicStreaming: true,
+        slug: script.slug,
+        sessionToken: session.id,
+        baseUrl,
+        key: (key || keyRecord.key_string || "").trim(),
+        obfuscate: false,
+      });
+      const obfRes = await obfuscateLuauVM(bundled, { preset: "balanced" });
+      // SECURITY: see matching comment above -- never fall back to raw/unobfuscated
+      // source on an obfuscation failure.
+      if (obfRes.ok) {
+        rawPayload = obfRes.output;
+      } else {
+        console.error(`[verify] VM obfuscation failed for "${script.slug}", falling back to polymorphic wrap: ${obfRes.error}`);
+        rawPayload = wrapPolymorphicLuau(bundled);
+      }
+      dbService.saveProtectedPayload(script.slug, rawPayload, obfRes.stats).catch(console.error);
+    }
 
     const nonce = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const secretKey = `${session.id}_${(key || "").trim()}_${nonce}`;

@@ -1,17 +1,11 @@
 // components/ClaimScriptModal.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Key,
-  X,
-  Search,
-  Terminal,
-  ArrowRight,
-  ShieldCheck,
-  ChevronRight,
-} from "lucide-react";
+import { Key, Search, Terminal, ShieldCheck, ChevronRight, Lock } from "lucide-react";
+import { Badge, Button, Input, Modal, type ButtonSize, type ButtonVariant } from "@/components/ui";
+import { cn, focusRing } from "@/lib/utils";
 
 export interface ScriptSummary {
   id: string;
@@ -23,35 +17,23 @@ export interface ScriptSummary {
 
 interface Props {
   scripts: ScriptSummary[];
+  /** Extra classes merged onto the trigger Button. */
   buttonClassName?: string;
   buttonText?: string;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
 }
 
 export default function ClaimScriptModal({
   scripts,
   buttonClassName,
-  buttonText = "Claim License Key",
+  buttonText = "Claim license key",
+  variant = "primary",
+  size = "md",
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const router = useRouter();
-
-  // Close modal on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsOpen(false);
-    };
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-      window.addEventListener("keydown", handleKeyDown);
-    } else {
-      document.body.style.overflow = "auto";
-    }
-    return () => {
-      document.body.style.overflow = "auto";
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
 
   const filteredScripts = scripts.filter((s) => {
     const q = search.toLowerCase();
@@ -65,144 +47,94 @@ export default function ClaimScriptModal({
 
   return (
     <>
-      {/* Trigger Button */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className={
-          buttonClassName ||
-          "inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-xs sm:text-sm font-bold text-black hover:bg-zinc-200 transition-all active:scale-95 shadow-sm"
+      <Button variant={variant} size={size} onClick={() => setIsOpen(true)} className={buttonClassName}>
+        <Key />
+        <span>{buttonText}</span>
+      </Button>
+
+      <Modal
+        open={isOpen}
+        onClose={() => setIsOpen(false)}
+        size="lg"
+        title="Choose a script"
+        description="Your key is generated for this script and bound to your network IP."
+        footer={
+          <div className="flex flex-1 items-center justify-between text-caption text-fg-subtle">
+            <span className="inline-flex items-center gap-1.5">
+              <ShieldCheck className="size-3.5 text-fg-subtle" />
+              IP-bound verification
+            </span>
+            <span className="font-data">
+              {scripts.length} script{scripts.length === 1 ? "" : "s"} active
+            </span>
+          </div>
         }
       >
-        <Key className="w-4 h-4" />
-        <span>{buttonText}</span>
-        <ArrowRight className="w-4 h-4 opacity-70 group-hover:translate-x-0.5 transition-transform" />
-      </button>
-
-      {/* Modal Backdrop & Dialog */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-150">
-          <div
-            className="fixed inset-0"
-            onClick={() => setIsOpen(false)}
-            aria-hidden="true"
+        {scripts.length >= 3 && (
+          <Input
+            data-autofocus
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter by name or slug"
+            aria-label="Filter scripts"
+            leading={<Search />}
+            className="mb-3"
           />
+        )}
 
-          <div className="relative w-full max-w-lg bg-obsidian-900 border border-obsidian-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] z-10 animate-in zoom-in-95 duration-150">
-            {/* Modal Header */}
-            <div className="p-5 sm:p-6 border-b border-obsidian-700/80 bg-obsidian-850">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-obsidian-800 border border-obsidian-700 flex items-center justify-center text-white">
-                    <Key className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm sm:text-base font-bold text-white">
-                      Select Protected Script
-                    </h2>
-                    <p className="text-xs text-zinc-400 mt-0.5">
-                      Choose which script license to generate for your network IP.
-                    </p>
-                  </div>
-                </div>
-
+        {filteredScripts.length > 0 ? (
+          <ul className="space-y-1.5">
+            {filteredScripts.map((s) => (
+              <li key={s.id}>
                 <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-obsidian-800 transition-colors"
-                  aria-label="Close modal"
+                  type="button"
+                  onClick={() => handleSelectScript(s.slug)}
+                  className={cn(
+                    "group flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-surface-raised p-3 text-left transition-colors duration-100 hover:border-line-strong hover:bg-surface-hover",
+                    focusRing,
+                  )}
                 >
-                  <X className="w-5 h-5" />
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-fg-subtle group-hover:text-fg">
+                      <Terminal className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="truncate text-body-sm font-semibold text-fg">{s.name}</span>
+                        <Badge mono>/{s.slug}</Badge>
+                        {s.use_auth !== false ? (
+                          <Badge tone="accent">
+                            <Lock className="size-3" />
+                            IP lock
+                          </Badge>
+                        ) : (
+                          <Badge>Direct</Badge>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-caption text-fg-subtle">Bound to your IP when claimed.</p>
+                    </div>
+                  </div>
+                  <span className="flex shrink-0 items-center gap-0.5 text-caption font-medium text-fg-muted group-hover:text-fg">
+                    Select
+                    <ChevronRight className="size-4" />
+                  </span>
                 </button>
-              </div>
-
-              {/* Search Bar */}
-              {scripts.length >= 3 && (
-                <div className="mt-4 relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Filter scripts by name or slug..."
-                    className="w-full bg-obsidian-800 border border-obsidian-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-zinc-500 outline-none focus:border-zinc-400 transition-colors font-mono"
-                    autoFocus
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Modal Body / Script List */}
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-2.5 flex-1">
-              {filteredScripts.length > 0 ? (
-                filteredScripts.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleSelectScript(s.slug)}
-                    className="w-full text-left p-3.5 rounded-xl border border-obsidian-700 bg-obsidian-800/80 hover:bg-obsidian-750 hover:border-zinc-500 transition-all flex items-center justify-between group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-obsidian-900 border border-obsidian-700 text-zinc-300 group-hover:text-white flex items-center justify-center transition-colors">
-                        <Terminal className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs sm:text-sm font-bold text-white transition-colors">
-                            {s.name}
-                          </span>
-                          <span className="text-[10px] font-mono bg-obsidian-900 text-zinc-400 border border-obsidian-700 px-1.5 py-0.5 rounded">
-                            /{s.slug}
-                          </span>
-                          {s.use_auth !== false ? (
-                            <span className="text-[9px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">
-                              IP Lock
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-mono font-semibold bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded">
-                              Direct
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-zinc-400 mt-0.5">
-                          Bound to claimant IP upon completion.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-xs font-semibold text-zinc-400 group-hover:text-white group-hover:translate-x-1 transition-all pl-2">
-                      <span>Select</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </div>
-                  </button>
-                ))
-              ) : scripts.length === 0 ? (
-                <div className="text-center py-8 border border-dashed border-obsidian-700 rounded-xl bg-obsidian-850">
-                  <ShieldCheck className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-                  <p className="text-xs font-semibold text-zinc-300">
-                    No active scripts currently available
-                  </p>
-                  <p className="text-[11px] text-zinc-500 mt-1">
-                    Check back soon or join our Discord community.
-                  </p>
-                </div>
-              ) : (
-                <div className="text-center py-6 text-xs text-zinc-500 font-mono">
-                  No scripts matching &ldquo;{search}&rdquo;.
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-3.5 sm:p-4 border-t border-obsidian-700/80 bg-obsidian-850 flex items-center justify-between text-[11px] text-zinc-400 font-mono">
-              <span className="flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                IP-Bound Verification
-              </span>
-              <span className="text-zinc-500">
-                {scripts.length} script{scripts.length === 1 ? "" : "s"} active
-              </span>
-            </div>
+              </li>
+            ))}
+          </ul>
+        ) : scripts.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-line-strong bg-surface px-4 py-8 text-center">
+            <ShieldCheck className="mx-auto mb-2 size-7 text-fg-disabled" />
+            <p className="text-body-sm font-medium text-fg">No scripts are available yet</p>
+            <p className="mt-1 text-caption text-fg-subtle">Check back soon, or ask in the Discord community.</p>
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="py-6 text-center text-body-sm text-fg-subtle">
+            No scripts match &ldquo;{search}&rdquo;.
+          </p>
+        )}
+      </Modal>
     </>
   );
 }

@@ -190,26 +190,26 @@ export default function DmsManager() {
   return (
     <div className="space-y-4">
       {notice && (
-        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="p-3 bg-success/10 border border-success/30 rounded-lg text-success-text text-caption flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-success-text shrink-0" />
           <span>{notice}</span>
         </div>
       )}
 
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#12141d] border border-gray-800 rounded-2xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-surface-raised border border-line rounded-lg">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+          <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-center text-accent-text">
             <Mail className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+            <h2 className="text-body-sm font-bold text-fg flex items-center gap-2">
               Direct Messages / "Contact Your Dev"
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              <span className="px-2 py-0.5 rounded-full text-micro font-data bg-accent/20 text-accent-text border border-accent/30">
                 {conversations.length} Active Conversations
               </span>
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-caption text-fg-muted mt-0.5">
               1-on-1 private tickets and direct support chats initiated by players directly through their in-game AtomWare script hub.
             </p>
           </div>
@@ -222,7 +222,7 @@ export default function DmsManager() {
             if (selectedUserId) fetchThread(selectedUserId);
           }}
           disabled={loadingList}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs font-semibold border border-gray-700/60 transition-all self-start sm:self-auto"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-hover hover:bg-surface-active text-fg hover:text-fg text-caption font-semibold border border-line-strong transition-all self-start sm:self-auto"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loadingList ? "animate-spin" : ""}`} />
           <span>Refresh</span>
@@ -232,26 +232,26 @@ export default function DmsManager() {
       {/* Two-Pane DMs Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[640px]">
         {/* Left Pane: Conversations List */}
-        <div className="flex flex-col bg-[#12141d] border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="p-3 bg-[#0c0e15] border-b border-gray-800">
+        <div className="flex flex-col bg-surface-raised border border-line rounded-lg overflow-hidden">
+          <div className="p-3 bg-surface border-b border-line">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search by player or user ID..."
-                className="w-full bg-[#181a24] border border-gray-700/80 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-500"
+                className="w-full bg-surface-hover border border-line-strong rounded-lg pl-9 pr-3 py-1.5 text-caption text-fg placeholder:text-fg-subtle outline-none focus:border-accent"
               />
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-gray-800/40">
+          <div className="flex-1 overflow-y-auto divide-y divide-line-subtle">
             {filteredConversations.length === 0 ? (
-              <div className="p-8 text-center text-gray-500 text-xs">
+              <div className="p-4 text-center text-fg-subtle text-caption">
                 <Mail className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 <p>No direct messages yet.</p>
-                <p className="text-[10px] text-gray-600 mt-0.5">Players can click "Contact Your Dev" in-game to start a chat.</p>
+                <p className="text-micro text-fg-disabled mt-0.5">Players can click "Contact Your Dev" in-game to start a chat.</p>
               </div>
             ) : (
               filteredConversations.map((c) => {
@@ -265,8 +265,8 @@ export default function DmsManager() {
                     onClick={() => setSelectedUserId(c.user_id)}
                     className={`w-full text-left p-3 flex items-start gap-3 transition-colors ${
                       isSelected
-                        ? "bg-indigo-600/15 border-l-2 border-indigo-500"
-                        : "hover:bg-gray-800/30"
+                        ? "bg-accent/15 border-l-2 border-accent/60"
+                        : "hover:bg-surface-hover"
                     }`}
                   >
                     <img
@@ -276,7 +276,7 @@ export default function DmsManager() {
                           : `/api/roblox/avatar?username=${encodeURIComponent(c.username)}`
                       }
                       alt={c.username}
-                      className="w-10 h-10 rounded-full bg-[#181a24] border border-gray-700/60 object-cover shrink-0"
+                      className="w-10 h-10 rounded-full bg-surface-hover border border-line-strong object-cover shrink-0"
                       onError={(e: any) => {
                         e.target.src = `/api/roblox/avatar?username=${encodeURIComponent(c.username)}`;
                       }}
@@ -284,22 +284,22 @@ export default function DmsManager() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className={`text-xs font-bold truncate ${isSelected ? "text-indigo-300" : "text-white"}`}>
+                        <span className={`text-caption font-bold truncate ${isSelected ? "text-accent-text" : "text-fg"}`}>
                           {c.username}
                         </span>
-                        <span className="text-[10px] text-gray-500 font-mono shrink-0 ml-1">
+                        <span className="text-micro text-fg-subtle font-data shrink-0 ml-1">
                           {formatTime(c.last_timestamp)}
                         </span>
                       </div>
 
-                      <p className="text-xs text-gray-400 truncate mt-0.5">
+                      <p className="text-caption text-fg-muted truncate mt-0.5">
                         {c.last_message}
                       </p>
 
-                      <div className="flex items-center gap-1.5 mt-1 text-[10px] text-gray-500">
+                      <div className="flex items-center gap-1.5 mt-1 text-micro text-fg-subtle">
                         <span>ID: {c.user_id}</span>
                         {c.unread_count > 0 && (
-                          <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-bold text-[9px] animate-pulse">
+                          <span className="px-1.5 py-0.2 rounded-full bg-danger text-fg font-bold text-micro">
                             {c.unread_count} new
                           </span>
                         )}
@@ -313,11 +313,11 @@ export default function DmsManager() {
         </div>
 
         {/* Right Pane: Active Conversation Thread (2/3 width) */}
-        <div className="lg:col-span-2 flex flex-col bg-[#12141d] border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="lg:col-span-2 flex flex-col bg-surface-raised border border-line rounded-lg overflow-hidden">
           {selectedConv ? (
             <>
               {/* Thread Header */}
-              <div className="px-4 py-3 bg-[#0c0e15] border-b border-gray-800 flex items-center justify-between">
+              <div className="px-4 py-3 bg-surface border-b border-line flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <img
                     src={
@@ -326,32 +326,32 @@ export default function DmsManager() {
                         : `/api/roblox/avatar?username=${encodeURIComponent(selectedConv.username)}`
                     }
                     alt={selectedConv.username}
-                    className="w-8 h-8 rounded-full border border-gray-700/60 object-cover"
+                    className="w-8 h-8 rounded-full border border-line-strong object-cover"
                     onError={(e: any) => {
                       e.target.src = `/api/roblox/avatar?username=${encodeURIComponent(selectedConv.username)}`;
                     }}
                   />
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white">{selectedConv.username}</span>
+                      <span className="text-caption font-bold text-fg">{selectedConv.username}</span>
                       {selectedConv.user_id && selectedConv.user_id !== "0" && (
                         <a
                           href={`https://www.roblox.com/users/${selectedConv.user_id}/profile`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                          className="text-micro text-accent-text hover:text-accent-text flex items-center gap-1"
                         >
                           <span>Roblox Profile</span>
                           <ExternalLink className="w-2.5 h-2.5" />
                         </a>
                       )}
                     </div>
-                    <span className="text-[10px] text-gray-500 font-mono">User ID: {selectedConv.user_id}</span>
+                    <span className="text-micro text-fg-subtle font-data">User ID: {selectedConv.user_id}</span>
                   </div>
                 </div>
 
-                <span className="text-[11px] text-emerald-400 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-micro text-success-text flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-success" />
                   Direct Script Channel
                 </span>
               </div>
@@ -359,11 +359,11 @@ export default function DmsManager() {
               {/* Thread Messages */}
               <div className="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar">
                 {loadingThread && messages.length === 0 ? (
-                  <div className="flex items-center justify-center h-full text-xs text-gray-500">
+                  <div className="flex items-center justify-center h-full text-caption text-fg-subtle">
                     <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Loading conversation...
                   </div>
                 ) : messages.length === 0 ? (
-                  <div className="text-center py-16 text-gray-500 text-xs">
+                  <div className="text-center py-16 text-fg-subtle text-caption">
                     <Mail className="w-8 h-8 mx-auto mb-2 opacity-30" />
                     <p>No messages yet in this ticket.</p>
                   </div>
@@ -376,8 +376,8 @@ export default function DmsManager() {
                         key={m.id}
                         className={`flex flex-col ${isDev ? "items-end" : "items-start"}`}
                       >
-                        <div className="flex items-center gap-1.5 mb-1 px-1 text-[10px] text-gray-500">
-                          <span className="font-semibold text-gray-300">
+                        <div className="flex items-center gap-1.5 mb-1 px-1 text-micro text-fg-subtle">
+                          <span className="font-semibold text-fg">
                             {isDev ? "👑 Admin / Dev" : m.username}
                           </span>
                           <span>•</span>
@@ -385,10 +385,10 @@ export default function DmsManager() {
                         </div>
 
                         <div
-                          className={`max-w-md px-3.5 py-2.5 rounded-2xl text-xs break-words leading-relaxed shadow-sm ${
+                          className={`max-w-md px-3.5 py-2.5 rounded-lg text-caption break-words leading-relaxed ${
                             isDev
-                              ? "bg-purple-600 text-white rounded-br-none"
-                              : "bg-[#181a24] text-gray-200 border border-gray-700/60 rounded-bl-none"
+                              ? "bg-accent text-accent-fg rounded-br-none"
+                              : "bg-surface-hover text-fg border border-line-strong rounded-bl-none"
                           }`}
                         >
                           {m.message}
@@ -403,20 +403,20 @@ export default function DmsManager() {
               {/* Reply Input Bar */}
               <form
                 onSubmit={handleSendReply}
-                className="p-3 bg-[#0c0e15] border-t border-gray-800 flex items-center gap-2"
+                className="p-3 bg-surface border-t border-line flex items-center gap-2"
               >
                 <input
                   type="text"
                   value={replyInput}
                   onChange={(e) => setReplyInput(e.target.value)}
                   placeholder={`Reply to @${selectedConv.username}...`}
-                  className="flex-1 bg-[#181a24] border border-gray-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-purple-500"
+                  className="flex-1 bg-surface-hover border border-line-strong rounded-lg px-3.5 py-2 text-caption text-fg placeholder:text-fg-subtle outline-none focus:border-accent"
                 />
 
                 <button
                   type="submit"
                   disabled={sendingReply || !replyInput.trim()}
-                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-semibold shadow-md shadow-purple-600/20 flex items-center gap-1.5 transition-all shrink-0"
+                  className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 text-accent-fg text-caption font-semibold flex items-center gap-1.5 transition-all shrink-0"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>{sendingReply ? "Sending..." : "Send Reply"}</span>
@@ -424,10 +424,10 @@ export default function DmsManager() {
               </form>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8 text-gray-500">
+            <div className="flex flex-col items-center justify-center h-full text-center p-4 text-fg-subtle">
               <User className="w-10 h-10 mb-2 opacity-30" />
-              <p className="text-sm font-semibold text-gray-400">Select a Conversation</p>
-              <p className="text-xs text-gray-500 mt-1 max-w-sm">
+              <p className="text-body-sm font-semibold text-fg-muted">Select a Conversation</p>
+              <p className="text-caption text-fg-subtle mt-1 max-w-sm">
                 Choose a player from the list on the left to view and respond to their direct messages.
               </p>
             </div>

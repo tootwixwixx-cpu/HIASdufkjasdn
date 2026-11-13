@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
 
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   const isVercelCron = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
 
-  if (!isVercelCron && !isAuthenticated()) {
+  if (!isVercelCron && !(await isAuthenticated())) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 

@@ -142,6 +142,11 @@ CREATE TABLE IF NOT EXISTS public.scripts (
     github_auto_pull BOOLEAN NOT NULL DEFAULT false,
     github_last_commit TEXT DEFAULT NULL,
     github_last_pulled_at TIMESTAMPTZ DEFAULT NULL,
+    is_obfuscated BOOLEAN NOT NULL DEFAULT true,
+    obfuscated_at TIMESTAMPTZ DEFAULT NULL,
+    obfuscation_stats JSONB DEFAULT NULL,
+    vm_preset TEXT DEFAULT 'balanced',
+    obfuscated_payload TEXT DEFAULT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );

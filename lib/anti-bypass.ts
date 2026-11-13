@@ -2,31 +2,45 @@
 import crypto from "crypto";
 import type { CheckpointItem } from "./store";
 
-const HMAC_SECRET =
-  process.env.ANTI_BYPASS_SECRET ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  "atomprotect_fortress_stateless_secret_v2_981274";
+// SECURITY: must come from its own dedicated env var. Previously this fell back to the
+// Supabase service-role key (reusing a DB credential as an unrelated HMAC secret) and,
+// failing that, a hardcoded string baked into the source. Both fallbacks are removed —
+// if ANTI_BYPASS_SECRET isn't set, every signed token this module issues/verifies is
+// invalid (fails closed) rather than silently using a guessable/leaked key.
+const HMAC_SECRET = process.env.ANTI_BYPASS_SECRET || "";
+if (!HMAC_SECRET) {
+  console.error(
+    "[anti-bypass] ANTI_BYPASS_SECRET is not set. Checkpoint/gateway/claim tokens cannot be signed or verified."
+  );
+}
 
 // In-memory set of consumed claim tokens to prevent replay attacks
 const consumedClaimTokens = new Set<string>();
 
+// Normalizes an IPv4-mapped IPv6 address ("::ffff:1.2.3.4") down to its plain IPv4
+// form, so the *same* address represented in either notation compares equal. This is
+// the only legitimate "different format, same address" case — it must NOT be used to
+// wave through an arbitrary IPv4 address against an arbitrary IPv6 address (that was
+// the bug: comparing "does it contain a colon" instead of the actual address).
+function normalizeIpForCompare(ip: string): string {
+  const v4MappedMatch = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.exec(ip.trim());
+  if (v4MappedMatch) return v4MappedMatch[1];
+  return ip.trim().toLowerCase();
+}
+
 export function isIpMatching(tokenIp: string, reqIp: string): boolean {
   if (!tokenIp || !reqIp) return true;
-  if (tokenIp === reqIp) return true;
+
+  const normToken = normalizeIpForCompare(tokenIp);
+  const normReq = normalizeIpForCompare(reqIp);
+  if (normToken === normReq) return true;
 
   // Localhost aliases
   const isLocalToken =
-    tokenIp === "127.0.0.1" || tokenIp === "::1" || tokenIp === "localhost";
+    normToken === "127.0.0.1" || normToken === "::1" || normToken === "localhost";
   const isLocalReq =
-    reqIp === "127.0.0.1" || reqIp === "::1" || reqIp === "localhost";
+    normReq === "127.0.0.1" || normReq === "::1" || normReq === "localhost";
   if (isLocalToken && isLocalReq) return true;
-
-  // Allow dual-stack transitions (e.g. mobile carrier switching between IPv4 NAT64 and IPv6)
-  const tokenIsV6 = tokenIp.includes(":");
-  const reqIsV6 = reqIp.includes(":");
-  if (tokenIsV6 !== reqIsV6) {
-    return true;
-  }
 
   return false;
 }

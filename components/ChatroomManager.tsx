@@ -17,6 +17,7 @@ import {
   FileText,
   X,
 } from "lucide-react";
+import { Modal, Button, Textarea } from "@/components/ui";
 
 interface ChatMessage {
   id: string;
@@ -367,27 +368,27 @@ export default function ChatroomManager() {
     <div className="space-y-4">
       {/* Toast Notice */}
       {notice && (
-        <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl text-purple-300 text-xs flex items-center gap-2 animate-in fade-in duration-200">
-          <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+        <div className="p-3 bg-accent/10 border border-accent/30 rounded-lg text-accent-text text-caption flex items-center gap-2 animate-in fade-in duration-200">
+          <CheckCircle2 className="w-4 h-4 text-accent-text shrink-0" />
           <span>{notice}</span>
         </div>
       )}
 
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#12141d] border border-gray-800 rounded-2xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-surface-raised border border-line rounded-lg">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+          <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-center text-accent-text">
             <MessageSquare className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+            <h2 className="text-body-sm font-bold text-fg flex items-center gap-2">
               Global In-Game Chatroom
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-micro font-data bg-success/10 text-success-text border border-success/25">
+                <span className="w-1.5 h-1.5 rounded-full bg-success" />
                 Live Sync Active
               </span>
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-caption text-fg-muted mt-0.5">
               Real-time communication hub across all 700+ supported Roblox games. Chats sent here appear instantly inside player script hubs.
             </p>
           </div>
@@ -398,7 +399,7 @@ export default function ChatroomManager() {
             type="button"
             onClick={handleClearAllHistory}
             disabled={clearingHistory || messages.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 text-xs font-semibold border border-rose-500/30 transition-all disabled:opacity-40 disabled:pointer-events-none"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger-text hover:text-danger-text text-caption font-semibold border border-danger/30 transition-all disabled:opacity-40 disabled:pointer-events-none"
             title="Permanently delete all chatroom messages"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -409,7 +410,7 @@ export default function ChatroomManager() {
             type="button"
             onClick={refreshAll}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-300 hover:text-white text-xs font-semibold border border-gray-700/60 transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-hover hover:bg-surface-active text-fg hover:text-fg text-caption font-semibold border border-line-strong transition-all"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
@@ -418,19 +419,19 @@ export default function ChatroomManager() {
       </div>
 
       {/* Cooldown Settings Strip */}
-      <div className="p-3.5 bg-[#12141d] border border-gray-800 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="p-3.5 bg-surface-raised border border-line rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-center text-accent-text shrink-0">
             <Timer className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white">Chat Cooldown Rate Limit</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              <span className="text-caption font-bold text-fg">Chat Cooldown Rate Limit</span>
+              <span className="px-2 py-0.5 rounded-full text-micro font-data bg-accent/20 text-accent-text border border-accent/30">
                 {cooldownSeconds === 0 ? "Off (0s)" : `${cooldownSeconds}s active`}
               </span>
             </div>
-            <p className="text-[11px] text-gray-400">
+            <p className="text-micro text-fg-muted">
               Prevents script users from spamming messages faster than this cooldown.
             </p>
           </div>
@@ -444,17 +445,17 @@ export default function ChatroomManager() {
               type="button"
               disabled={savingCooldown}
               onClick={() => handleSaveCooldown(sec)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-mono font-semibold transition-all ${
+              className={`px-2.5 py-1 rounded-lg text-caption font-data font-semibold transition-all ${
                 cooldownSeconds === sec
-                  ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
-                  : "bg-gray-800/80 hover:bg-gray-700 text-gray-300 border border-gray-700/60"
+                  ? "bg-accent text-accent-fg"
+                  : "bg-surface-hover hover:bg-surface-active text-fg border border-line-strong"
               }`}
             >
               {sec === 0 ? "Off" : `${sec}s`}
             </button>
           ))}
 
-          <div className="flex items-center gap-1 ml-1 pl-2 border-l border-gray-800">
+          <div className="flex items-center gap-1 ml-1 pl-2 border-l border-line">
             <input
               type="number"
               min="0"
@@ -462,13 +463,13 @@ export default function ChatroomManager() {
               value={customCooldownInput}
               onChange={(e) => setCustomCooldownInput(e.target.value)}
               placeholder="Sec"
-              className="w-16 bg-[#181a24] border border-gray-700/80 rounded-lg px-2 py-1 text-xs text-white font-mono outline-none focus:border-indigo-500"
+              className="w-16 bg-surface-hover border border-line-strong rounded-lg px-2 py-1 text-caption text-fg font-data outline-none focus:border-accent"
             />
             <button
               type="button"
               disabled={savingCooldown || !customCooldownInput}
               onClick={() => handleSaveCooldown(Number(customCooldownInput))}
-              className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200 border border-gray-700/60 transition-colors"
+              className="px-2.5 py-1 rounded-lg bg-surface-hover hover:bg-surface-active text-caption text-fg border border-line-strong transition-colors"
             >
               Set
             </button>
@@ -479,16 +480,16 @@ export default function ChatroomManager() {
       {/* Main 2-Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column: Live Chat Stream (2/3 width) */}
-        <div className="lg:col-span-2 flex flex-col h-[620px] bg-[#12141d] border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="lg:col-span-2 flex flex-col h-[620px] bg-surface-raised border border-line rounded-lg overflow-hidden">
           {/* Stream Header */}
-          <div className="px-4 py-3 bg-[#0c0e15] border-b border-gray-800 flex items-center justify-between">
+          <div className="px-4 py-3 bg-surface border-b border-line flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white">Live Messages</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] bg-purple-500/20 text-purple-300 font-mono">
+              <span className="text-caption font-bold text-fg">Live Messages</span>
+              <span className="px-2 py-0.5 rounded-full text-micro bg-accent/20 text-accent-text font-data">
                 {messages.length} messages loaded
               </span>
             </div>
-            <span className="text-[11px] text-gray-500 flex items-center gap-1">
+            <span className="text-micro text-fg-subtle flex items-center gap-1">
               <Clock className="w-3 h-3" /> Auto-updates every 3.5s
             </span>
           </div>
@@ -499,10 +500,10 @@ export default function ChatroomManager() {
             className="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar"
           >
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center p-8 text-gray-500">
+              <div className="flex flex-col items-center justify-center h-full text-center p-4 text-fg-subtle">
                 <MessageSquare className="w-10 h-10 mb-2 opacity-30" />
-                <p className="text-sm font-semibold text-gray-400">No messages in chatroom yet</p>
-                <p className="text-xs text-gray-500 mt-1 max-w-sm">
+                <p className="text-body-sm font-semibold text-fg-muted">No messages in chatroom yet</p>
+                <p className="text-caption text-fg-subtle mt-1 max-w-sm">
                   Send a broadcast below or launch your Roblox script to send the first message!
                 </p>
               </div>
@@ -515,16 +516,16 @@ export default function ChatroomManager() {
                 return (
                   <div
                     key={m.id}
-                    className={`flex items-start gap-3 p-2.5 rounded-xl transition-colors group ${
+                    className={`flex items-start gap-3 p-2.5 rounded-lg transition-colors group ${
                       isDev
-                        ? "bg-purple-950/25 border border-purple-800/40"
-                        : "hover:bg-gray-800/30"
+                        ? "bg-accent/10 border border-accent/40"
+                        : "hover:bg-surface-hover"
                     }`}
                   >
                     {/* Avatar */}
                     <div className="relative shrink-0">
                       {isDev ? (
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-white text-xs font-bold shadow-md shadow-purple-600/30">
+                        <div className="bg-accent hover:bg-accent-hover w-9 h-9 rounded-full flex items-center justify-center text-accent-fg text-caption font-bold">
                           👑
                         </div>
                       ) : (
@@ -535,7 +536,7 @@ export default function ChatroomManager() {
                               : `/api/roblox/avatar?username=${encodeURIComponent(m.username)}`
                           }
                           alt={m.username}
-                          className="w-9 h-9 rounded-full bg-[#181a24] border border-gray-700/60 object-cover"
+                          className="w-9 h-9 rounded-full bg-surface-hover border border-line-strong object-cover"
                           onError={(e: any) => {
                             e.target.src = `/api/roblox/avatar?username=${encodeURIComponent(m.username)}`;
                           }}
@@ -551,33 +552,33 @@ export default function ChatroomManager() {
                             href={profileUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs font-bold text-white hover:text-purple-400 flex items-center gap-1 transition-colors"
+                            className="text-caption font-bold text-fg hover:text-accent-text flex items-center gap-1 transition-colors"
                           >
                             <span>{m.display_name || m.username}</span>
                             <ExternalLink className="w-2.5 h-2.5 opacity-50" />
                           </a>
                         ) : (
-                          <span className="text-xs font-bold text-white">
+                          <span className="text-caption font-bold text-fg">
                             {isDev ? "👑 Admin / Dev" : (m.display_name || m.username)}
                           </span>
                         )}
 
                         {isDev && (
-                          <span className="px-1.5 py-0.2 rounded-md bg-purple-600 text-white font-bold text-[9px] tracking-wide">
+                          <span className="px-1.5 py-0.2 rounded-md bg-accent text-accent-fg font-bold text-micro tracking-wide">
                             DEV
                           </span>
                         )}
 
-                        <span className="text-[10px] text-gray-500 font-mono">
+                        <span className="text-micro text-fg-subtle font-data">
                           @{m.username}
                         </span>
 
-                        <span className="text-[10px] text-gray-500 ml-auto font-mono">
+                        <span className="text-micro text-fg-subtle ml-auto font-data">
                           {formatTime(m.created_at)}
                         </span>
                       </div>
 
-                      <p className="text-xs text-gray-200 mt-1 break-words leading-relaxed select-text">
+                      <p className="text-caption text-fg mt-1 break-words leading-relaxed select-text">
                         {m.message}
                       </p>
                     </div>
@@ -586,7 +587,7 @@ export default function ChatroomManager() {
                     <button
                       type="button"
                       onClick={() => handleDeleteMessage(m.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-rose-500/20 text-gray-500 hover:text-rose-400 transition-all shrink-0"
+                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-danger/20 text-fg-subtle hover:text-danger-text transition-all shrink-0"
                       title="Delete message from chatroom"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -600,19 +601,19 @@ export default function ChatroomManager() {
           {/* Broadcast Message Input Form */}
           <form
             onSubmit={handleSendDevMessage}
-            className="p-3 bg-[#0c0e15] border-t border-gray-800 flex items-center gap-2"
+            className="p-3 bg-surface border-t border-line flex items-center gap-2"
           >
             <input
               type="text"
               value={devMessageInput}
               onChange={(e) => setDevMessageInput(e.target.value)}
               placeholder="Send an official developer broadcast to all active in-game players..."
-              className="flex-1 bg-[#181a24] border border-gray-700/80 rounded-xl px-4 py-2 text-xs text-white placeholder-gray-500 outline-none focus:border-purple-500 transition-all"
+              className="flex-1 bg-surface-hover border border-line-strong rounded-lg px-4 py-2 text-caption text-fg placeholder:text-fg-subtle outline-none focus:border-accent transition-all"
             />
             <button
               type="submit"
               disabled={sending || !devMessageInput.trim()}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-purple-600/20 shrink-0"
+              className="bg-accent hover:bg-accent-hover px-4 py-2 rounded-lg disabled:opacity-40 text-accent-fg text-caption font-semibold flex items-center gap-1.5 transition-all shrink-0"
             >
               <Send className="w-3.5 h-3.5" />
               <span>{sending ? "Sending..." : "Send as Dev 👑"}</span>
@@ -621,15 +622,15 @@ export default function ChatroomManager() {
         </div>
 
         {/* Right Column: Blacklist Word Filter (1/3 width) */}
-        <div className="flex flex-col h-[620px] bg-[#12141d] border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="flex flex-col h-[620px] bg-surface-raised border border-line rounded-lg overflow-hidden">
           {/* Header */}
-          <div className="px-4 py-3 bg-[#0c0e15] border-b border-gray-800 flex items-center justify-between">
+          <div className="px-4 py-3 bg-surface border-b border-line flex items-center justify-between">
             <div>
-              <h3 className="text-xs font-bold text-white flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-rose-400" />
+              <h3 className="text-caption font-bold text-fg flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-danger-text" />
                 <span>Word Blacklist & Auto-Filter</span>
               </h3>
-              <p className="text-[11px] text-gray-400 mt-0.5">
+              <p className="text-micro text-fg-muted mt-0.5">
                 Prohibited words are automatically purged from all chats.
               </p>
             </div>
@@ -638,7 +639,7 @@ export default function ChatroomManager() {
             <button
               type="button"
               onClick={() => setShowBulkModal(true)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-semibold transition-all shrink-0"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger-text border border-danger/30 text-micro font-semibold transition-all shrink-0"
               title="Bulk import blacklist words"
             >
               <FileText className="w-3 h-3" />
@@ -647,18 +648,18 @@ export default function ChatroomManager() {
           </div>
 
           {/* Add Word Form */}
-          <form onSubmit={handleAddBlacklistWord} className="p-3 border-b border-gray-800 flex items-center gap-2">
+          <form onSubmit={handleAddBlacklistWord} className="p-3 border-b border-line flex items-center gap-2">
             <input
               type="text"
               value={newWordInput}
               onChange={(e) => setNewWordInput(e.target.value)}
               placeholder="Word or comma-separated list (e.g. scam, hack)..."
-              className="flex-1 bg-[#181a24] border border-gray-700/80 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-rose-500"
+              className="flex-1 bg-surface-hover border border-line-strong rounded-lg px-3 py-1.5 text-caption text-fg placeholder:text-fg-subtle outline-none focus:border-accent"
             />
             <button
               type="submit"
               disabled={addingWord || !newWordInput.trim()}
-              className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1 transition-all shrink-0 shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-danger-solid hover:bg-danger-solid-hover disabled:opacity-40 text-white text-caption font-semibold flex items-center gap-1 transition-all shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add</span>
@@ -667,28 +668,28 @@ export default function ChatroomManager() {
 
           {/* Filtered Words Cloud */}
           <div className="flex-1 p-4 overflow-y-auto space-y-2 custom-scrollbar">
-            <div className="flex items-center justify-between text-[11px] text-gray-400 mb-2">
+            <div className="flex items-center justify-between text-micro text-fg-muted mb-2">
               <span>Active Blacklisted Words ({blacklistWords.length})</span>
             </div>
 
             {blacklistWords.length === 0 ? (
-              <div className="text-center py-10 text-gray-500 text-xs">
+              <div className="text-center py-10 text-fg-subtle text-caption">
                 <Ban className="w-8 h-8 mx-auto mb-2 opacity-25" />
                 <p>No words currently blacklisted.</p>
-                <p className="text-[10px] text-gray-600 mt-0.5">Add terms above or use Bulk Add.</p>
+                <p className="text-micro text-fg-disabled mt-0.5">Add terms above or use Bulk Add.</p>
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {blacklistWords.map((word) => (
                   <span
                     key={word}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs font-medium group"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-danger/10 border border-danger/25 text-danger-text text-caption font-medium group"
                   >
                     <span>{word}</span>
                     <button
                       type="button"
                       onClick={() => handleDeleteBlacklistWord(word)}
-                      className="hover:text-white p-0.5 rounded transition-colors text-rose-400 group-hover:text-white"
+                      className="hover:text-fg p-0.5 rounded transition-colors text-danger-text group-hover:text-fg"
                       title="Remove from blacklist"
                     >
                       ×
@@ -700,7 +701,7 @@ export default function ChatroomManager() {
           </div>
 
           {/* Explainer Box */}
-          <div className="p-3 bg-[#0c0e15] border-t border-gray-800 text-[11px] text-gray-400 leading-relaxed">
+          <div className="p-3 bg-surface border-t border-line text-micro text-fg-muted leading-relaxed">
             <p>
               💡 <strong>Instant Purge:</strong> Adding a word scans and permanently cleanses all existing messages containing it from Supabase and active clients.
             </p>
@@ -708,71 +709,46 @@ export default function ChatroomManager() {
         </div>
       </div>
 
-      {/* Bulk Add Blacklist Words Modal */}
-      {showBulkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-md bg-[#12141d] border border-gray-800 rounded-2xl shadow-2xl overflow-hidden">
-            <div className="p-4 bg-[#0c0e15] border-b border-gray-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                  <ShieldAlert className="w-4 h-4" />
-                </div>
-                <h3 className="text-sm font-bold text-white">Bulk Add Blacklist Words</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowBulkModal(false)}
-                className="p-1 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors"
+
+      {/* Bulk add blacklist words */}
+      <Modal
+        open={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        title="Add blacklist words in bulk"
+        description="Separate words or phrases with commas or new lines."
+        footer={
+          <div className="flex w-full items-center justify-between gap-2">
+            <span className="font-data text-caption text-fg-subtle">
+              {bulkWordsInput.split(/[\r\n,]+/).filter((w) => w.trim().length > 0).length} words
+            </span>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setShowBulkModal(false)}>Cancel</Button>
+              <Button
+                type="submit"
+                form="bulk-blacklist-form"
+                variant="danger"
+                loading={bulkAdding}
+                disabled={!bulkWordsInput.trim()}
               >
-                <X className="w-4 h-4" />
-              </button>
+                <Plus />
+                Add all words
+              </Button>
             </div>
-
-            <form onSubmit={handleBulkAddWords} className="p-4 space-y-3">
-              <p className="text-xs text-gray-400">
-                Paste or type multiple words/phrases below separated by <strong>commas</strong> or <strong>new lines</strong>.
-              </p>
-
-              <textarea
-                rows={7}
-                value={bulkWordsInput}
-                onChange={(e) => setBulkWordsInput(e.target.value)}
-                placeholder={"scam\nhack\nexploit\nword1, word2, word3"}
-                className="w-full bg-[#181a24] border border-gray-700/80 rounded-xl p-3 text-xs text-white placeholder-gray-500 outline-none focus:border-rose-500 font-mono resize-none"
-              />
-
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-[11px] text-gray-400 font-mono">
-                  {
-                    bulkWordsInput
-                      .split(/[\r\n,]+/)
-                      .filter((w) => w.trim().length > 0).length
-                  }{" "}
-                  words detected
-                </span>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowBulkModal(false)}
-                    className="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={bulkAdding || !bulkWordsInput.trim()}
-                    className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-rose-600/30"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{bulkAdding ? "Importing..." : "Add All Words"}</span>
-                  </button>
-                </div>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        }
+      >
+        <form id="bulk-blacklist-form" onSubmit={handleBulkAddWords}>
+          <Textarea
+            mono
+            rows={8}
+            value={bulkWordsInput}
+            onChange={(e) => setBulkWordsInput(e.target.value)}
+            placeholder={"scam\nhack\nexploit\nword1, word2, word3"}
+            aria-label="Words to blacklist"
+            className="resize-none"
+          />
+        </form>
+      </Modal>
     </div>
   );
 }

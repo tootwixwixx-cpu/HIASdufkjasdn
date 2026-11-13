@@ -2,8 +2,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lock, ArrowRight, AlertCircle, Shield } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { Alert, Button, Card, Field, Input, Logo } from "@/components/ui";
+import { cn, focusRing } from "@/lib/utils";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -38,78 +40,67 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-obsidian-950 text-zinc-100 selection:bg-white selection:text-black">
-      <header className="px-6 py-4 border-b border-obsidian-700/80 bg-obsidian-900/60 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-obsidian-800 border border-obsidian-700 flex items-center justify-center font-bold text-white">
-            <Shield className="w-4 h-4" />
-          </div>
-          <span className="font-bold text-sm tracking-tight text-white font-mono">AEROAUTH</span>
+    <div className="flex min-h-screen flex-col justify-between bg-canvas text-fg">
+      <header className="flex h-14 items-center justify-between border-b border-line px-4 sm:px-6">
+        <Link href="/" className={cn("rounded-md", focusRing)} aria-label="AtomProtect home">
+          <Logo size="md" />
         </Link>
-        <Link href="/" className="text-xs text-zinc-400 hover:text-white transition-colors font-mono">
+        <Link
+          href="/"
+          className={cn("rounded-sm text-body-sm text-fg-muted transition-colors hover:text-fg", focusRing)}
+        >
           Return to site
         </Link>
       </header>
 
-      <main className="flex-1 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm bg-obsidian-900 border border-obsidian-700 rounded-2xl p-6 sm:p-7 shadow-2xl">
+      <main className="flex flex-1 items-center justify-center bg-grid-matrix p-4">
+        <Card className="w-full max-w-sm p-6 shadow-popover">
           <div className="mb-6">
-            <div className="w-9 h-9 rounded-xl bg-obsidian-800 border border-obsidian-700 text-white flex items-center justify-center mb-3">
-              <Lock className="w-4 h-4" />
-            </div>
-            <h1 className="text-lg font-bold text-white">Admin Console</h1>
-            <p className="text-xs text-zinc-400 mt-1">
-              Authorized credentials required for management access.
-            </p>
+            <h1 className="text-heading font-semibold text-fg">Staff console</h1>
+            <p className="mt-1 text-body-sm text-fg-muted">Sign in with your admin credentials.</p>
           </div>
 
           {error && (
-            <div className="mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs flex items-center gap-2 font-mono">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{error}</span>
-            </div>
+            <Alert tone="danger" icon={<AlertCircle />} className="mb-4">
+              {error}
+            </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
-            <div>
-              <label className="block text-zinc-400 font-medium mb-1">Username</label>
-              <input
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Field label="Username" htmlFor="login-username">
+              <Input
+                id="login-username"
+                size="lg"
                 type="text"
                 required
                 autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter admin username"
-                className="w-full bg-obsidian-800 border border-obsidian-700 rounded-xl px-3 py-2.5 text-white outline-none focus:border-zinc-400 transition-colors"
+                placeholder="Admin username"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-zinc-400 font-medium mb-1">Password</label>
-              <input
+            <Field label="Password" htmlFor="login-password">
+              <Input
+                id="login-password"
+                size="lg"
                 type="password"
                 required
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••••••••••"
-                className="w-full bg-obsidian-800 border border-obsidian-700 rounded-xl px-3 py-2.5 text-white outline-none focus:border-zinc-400 transition-colors"
+                placeholder="••••••••••••"
               />
-            </div>
+            </Field>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-black font-bold text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2 shadow-sm"
-            >
-              <span>{submitting ? "Authenticating..." : "Sign In"}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <Button type="submit" variant="primary" size="lg" loading={submitting} className="mt-2 w-full">
+              Sign in
+            </Button>
           </form>
-        </div>
+        </Card>
       </main>
 
-      <footer className="py-4 text-center text-xs text-zinc-600 border-t border-obsidian-800 font-mono">
+      <footer className="border-t border-line py-4 text-center text-caption text-fg-subtle">
         Restricted console. IP logging and intrusion detection active.
       </footer>
     </div>

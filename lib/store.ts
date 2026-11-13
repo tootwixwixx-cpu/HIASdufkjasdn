@@ -60,6 +60,18 @@ export interface ScriptRecord {
   github_auto_pull?: boolean;
   github_last_commit?: string | null;
   github_last_pulled_at?: string | null;
+  is_obfuscated?: boolean;
+  obfuscated_at?: string | null;
+  obfuscated_payload?: string | null;
+  obfuscation_stats?: {
+    inputSize?: number;
+    outputSize?: number;
+    time?: number;
+    expansionRatio?: number;
+    preset?: string;
+    layers?: string[];
+  } | null;
+  vm_preset?: "balanced" | "maximum" | "ultra" | string;
   created_at: string;
   updated_at: string;
 }
@@ -318,6 +330,25 @@ interface LocalDatabase {
 
 const DB_DIR = path.join(process.cwd(), "data");
 const DB_FILE = path.join(DB_DIR, "db.json");
+const PROTECTED_DIR = path.join(DB_DIR, "protected");
+if (!fs.existsSync(PROTECTED_DIR)) {
+  try { fs.mkdirSync(PROTECTED_DIR, { recursive: true }); } catch (_) {}
+}
+
+// SECURITY: resolves a script slug to its cached-payload path under PROTECTED_DIR,
+// whitelist-sanitizing the slug and verifying the resolved path actually stays inside
+// PROTECTED_DIR (defense-in-depth against path traversal even if a caller passes an
+// unsanitized slug directly). Returns null if the slug can't be resolved safely.
+function protectedPayloadPath(rawSlug: string): string | null {
+  const safeSlug = (rawSlug || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  if (!safeSlug) return null;
+  const resolved = path.resolve(PROTECTED_DIR, `${safeSlug}.lua`);
+  const resolvedDir = path.resolve(PROTECTED_DIR);
+  if (!resolved.startsWith(resolvedDir + path.sep) && resolved !== resolvedDir) {
+    return null;
+  }
+  return resolved;
+}
 
 const defaultLoaderConfig: LoaderConfigRecord = {
   id: "a0000000-0000-0000-0000-000000000001",
@@ -703,7 +734,17 @@ export const dbService = {
   async saveScript(script: Omit<ScriptRecord, "id" | "created_at" | "updated_at"> & { id?: string }): Promise<ScriptRecord> {
     const id = script.id || crypto.randomUUID();
     const now = new Date().toISOString();
-    const cleanSlug = (script.slug || "").trim().toLowerCase();
+    // SECURITY: the slug is used to build filesystem paths for the protected-payload
+    // cache (deleteScript/getProtectedPayload/saveProtectedPayload below) via
+    // path.join(PROTECTED_DIR, `${slug}.lua`). It must be whitelist-sanitized
+    // unconditionally — previously only the *auto-generated* fallback slug went
+    // through this filter, so a client-supplied slug like "../../../foo" could write
+    // the obfuscated payload outside PROTECTED_DIR entirely (path traversal / arbitrary
+    // file write).
+    const cleanSlug = (script.slug || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "-");
 
     const db = readLocalDb();
     // Validate slug uniqueness against other scripts
@@ -755,6 +796,10 @@ export const dbService = {
         github_auto_pull: record.github_auto_pull === true,
         github_last_commit: record.github_last_commit || null,
         github_last_pulled_at: record.github_last_pulled_at || null,
+        is_obfuscated: record.is_obfuscated !== false,
+        obfuscated_at: record.obfuscated_at || null,
+        obfuscation_stats: record.obfuscation_stats || null,
+        vm_preset: record.vm_preset || 'balanced',
         created_at: record.created_at,
         updated_at: record.updated_at,
       };
@@ -787,8 +832,70 @@ export const dbService = {
       }
     }
     const db = readLocalDb();
+    const target = db.scripts.find((s) => s.id === id);
+    if (target && target.slug) {
+      const pFile = protectedPayloadPath(target.slug);
+      if (pFile && fs.existsSync(pFile)) {
+        try { fs.unlinkSync(pFile); } catch (_) {}
+      }
+    }
     db.scripts = db.scripts.filter((s) => s.id !== id);
     writeLocalDb(db);
+  },
+
+  async getProtectedPayload(slugOrId: string): Promise<string | null> {
+    if (!slugOrId) return null;
+    const clean = slugOrId.trim().toLowerCase();
+    const filePath = protectedPayloadPath(clean);
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        return fs.readFileSync(filePath, "utf8");
+      } catch (e) {
+        console.error("Error reading protected payload file:", e);
+      }
+    }
+    const script = await this.getScriptBySlug(clean);
+    if (script?.obfuscated_payload) {
+      return script.obfuscated_payload;
+    }
+    return null;
+  },
+
+  async saveProtectedPayload(slug: string, payload: string, stats?: any): Promise<void> {
+    if (!slug || !payload) return;
+    const clean = slug.trim().toLowerCase();
+    if (!fs.existsSync(PROTECTED_DIR)) {
+      fs.mkdirSync(PROTECTED_DIR, { recursive: true });
+    }
+    const filePath = protectedPayloadPath(clean);
+    if (!filePath) {
+      console.error(`Refusing to save protected payload: slug "${slug}" resolves outside PROTECTED_DIR`);
+      return;
+    }
+    fs.writeFileSync(filePath, payload, "utf8");
+
+    const db = readLocalDb();
+    const script = db.scripts.find((s) => s.slug.toLowerCase() === clean);
+    if (script) {
+      script.is_obfuscated = true;
+      script.obfuscated_at = new Date().toISOString();
+      script.obfuscation_stats = stats || null;
+      script.obfuscated_payload = payload;
+      writeLocalDb(db);
+    }
+
+    if (isSupabaseConfigured && supabase && script) {
+      try {
+        await supabase.from("scripts").update({
+          is_obfuscated: true,
+          obfuscated_at: new Date().toISOString(),
+          obfuscation_stats: stats || null,
+          obfuscated_payload: payload,
+        }).eq("id", script.id);
+      } catch (err) {
+        console.warn("Supabase update protected payload fallback:", err);
+      }
+    }
   },
 
   // Keys

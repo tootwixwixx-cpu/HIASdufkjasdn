@@ -41,6 +41,7 @@ import {
   CheckSquare,
   Activity,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableEmpty, Button, Badge } from "@/components/ui";
 import { SOCIAL_PLATFORMS, BADGE_PRESETS } from "@/lib/social-platforms";
 import { WorkinkLogo } from "@/components/WorkinkLogo";
 
@@ -537,85 +538,58 @@ export default function CheckpointsPage() {
   });
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
-            <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-            Checkpoints & Creator Profile
-          </h1>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Configure multi-step checkpoint links, duration countdowns, script locks, and your guns.lol-style creator profile shown on the key claim portal.
-          </p>
-        </div>
-
-        {/* Tab Switcher */}
-        <div className="flex items-center bg-[#11131c] p-1 rounded-xl border border-gray-800">
-          <button
-            type="button"
-            onClick={() => setActiveTab("checkpoints")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === "checkpoints"
-                ? "bg-emerald-600 text-white shadow-sm"
-                : "text-gray-400 hover:text-white"
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Checkpoints Setup</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("profile")}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              activeTab === "profile"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-gray-400 hover:text-white"
-            }`}
-          >
-            <User className="w-3.5 h-3.5" />
-            <span>guns.lol Profile</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("bypass_attempts");
-              fetchBypassData();
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all relative ${
-              activeTab === "bypass_attempts"
-                ? "bg-rose-600 text-white shadow-sm"
-                : "text-gray-400 hover:text-white"
-            }`}
-          >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Bypass Shield & Lockouts</span>
-            {bypassSummary.total_attempts > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-500/30 text-rose-300 border border-rose-500/40">
-                {bypassSummary.total_attempts}
-              </span>
-            )}
-          </button>
-        </div>
+      <div className="border-b border-line pb-3">
+        <h1 className="text-heading font-semibold text-fg">Checkpoints & creator profile</h1>
+        <p className="mt-0.5 text-body-sm text-fg-muted">
+          Configure checkpoint links, countdowns and script locks, plus the creator profile shown on the key claim page.
+        </p>
       </div>
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => {
+          setActiveTab(v as "checkpoints" | "profile" | "bypass_attempts");
+          if (v === "bypass_attempts") fetchBypassData();
+        }}
+      >
+        <TabsList>
+          <TabsTrigger value="checkpoints">
+            <Layers />
+            Checkpoints
+          </TabsTrigger>
+          <TabsTrigger value="profile">
+            <User />
+            Creator profile
+          </TabsTrigger>
+          <TabsTrigger
+            value="bypass_attempts"
+            count={bypassSummary.total_attempts > 0 ? bypassSummary.total_attempts : undefined}
+          >
+            <ShieldAlert />
+            Bypass attempts
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* ========================================================================= */}
       {/* TAB 1: CHECKPOINTS SETUP */}
       {/* ========================================================================= */}
       {activeTab === "checkpoints" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Checkpoint Creation / Edit Form */}
-          <div className="lg:col-span-5 bg-[#12141e] border border-gray-800 rounded-xl p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                <Plus className="w-4 h-4 text-emerald-400" />
+          <div className="lg:col-span-5 bg-surface-raised border border-line rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <h2 className="text-caption font-bold text-fg flex items-center gap-2">
+                <Plus className="w-4 h-4 text-success-text" />
                 {editingId ? "Edit Checkpoint" : "Add Checkpoint"}
               </h2>
               {editingId && (
                 <button
                   type="button"
                   onClick={resetCheckpointForm}
-                  className="text-[11px] text-gray-400 hover:text-white"
+                  className="text-micro text-fg-muted hover:text-fg"
                 >
                   Cancel Edit
                 </button>
@@ -623,21 +597,21 @@ export default function CheckpointsPage() {
             </div>
 
             {checkpointError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl text-xs flex items-center gap-2">
+              <div className="p-3 bg-danger/10 border border-danger/30 text-danger-text rounded-lg text-caption flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{checkpointError}</span>
               </div>
             )}
 
             {checkpointSuccess && (
-              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs flex items-center gap-2">
+              <div className="p-3 bg-success/10 border border-success/30 text-success-text rounded-lg text-caption flex items-center gap-2">
                 <Check className="w-4 h-4 flex-shrink-0" />
                 <span>Checkpoint saved successfully!</span>
               </div>
             )}
 
             {/* Mode Switcher: Standard vs Work.ink */}
-            <div className="grid grid-cols-2 gap-2 p-1 bg-[#090a10] border border-gray-800 rounded-xl">
+            <div className="grid grid-cols-2 gap-2 p-1 bg-surface border border-line rounded-lg">
               <button
                 type="button"
                 onClick={() => {
@@ -645,23 +619,23 @@ export default function CheckpointsPage() {
                   setCpDuration(15);
                   if (cpTitle.startsWith("Work.ink Task")) setCpTitle("");
                 }}
-                className={`py-2 px-3 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                className={`py-2 px-3 rounded-lg font-semibold text-caption transition-all flex items-center justify-center gap-1.5 ${
                   !isWorkinkType
-                    ? "bg-gray-800 text-white shadow-sm"
-                    : "text-gray-400 hover:text-white"
+                    ? "bg-surface-hover text-fg"
+                    : "text-fg-muted hover:text-fg"
                 }`}
               >
-                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <Globe className="w-3.5 h-3.5 text-accent-text" />
                 <span>Standard Link</span>
               </button>
 
               <button
                 type="button"
                 onClick={switchToWorkinkMode}
-                className={`py-2 px-3 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-1.5 ${
+                className={`py-2 px-3 rounded-lg font-semibold text-caption transition-all flex items-center justify-center gap-1.5 ${
                   isWorkinkType
-                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30"
-                    : "text-purple-300 hover:text-white bg-purple-500/10 border border-purple-500/20"
+                    ? "bg-accent hover:bg-accent-hover text-accent-fg"
+                    : "text-accent-text hover:text-fg bg-accent/10 border border-accent/20"
                 }`}
               >
                 <WorkinkLogo className="w-3.5 h-3.5 flex-shrink-0" />
@@ -671,20 +645,20 @@ export default function CheckpointsPage() {
 
             {/* Work.ink Setup Guidance Card */}
             {isWorkinkType && (
-              <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/30 space-y-2">
+              <div className="p-3.5 rounded-lg bg-accent/10 border border-accent/30 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
+                  <span className="text-micro font-bold text-accent-text flex items-center gap-1.5">
                     <WorkinkLogo className="w-3.5 h-3.5 flex-shrink-0" />
                     Work.ink API Task (No Timer)
                   </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-200 border border-purple-500/40">
+                  <span className="text-micro font-data px-2 py-0.5 rounded bg-accent/20 text-accent-text border border-accent/40">
                     API Verified
                   </span>
                 </div>
-                <p className="text-[11px] text-zinc-300">
+                <p className="text-micro text-fg">
                   In your Work.ink dashboard, set your link's <strong>Target / Destination URL</strong> to:
                 </p>
-                <div className="flex items-center gap-1.5 bg-[#090a10] border border-purple-500/40 rounded-lg p-1.5 px-2 font-mono text-[11px] text-purple-200 justify-between">
+                <div className="flex items-center gap-1.5 bg-surface border border-accent/40 rounded-lg p-1.5 px-2 font-data text-micro text-accent-text justify-between">
                   <span className="truncate select-all">
                     {(() => {
                       const base = typeof window !== "undefined" ? window.location.origin : "https://atomprotect.vercel.app";
@@ -708,28 +682,28 @@ export default function CheckpointsPage() {
                         setTimeout(() => setDestinationCopied(false), 2000);
                       }
                     }}
-                    className="p-1 rounded hover:bg-purple-500/20 text-purple-300 transition-colors flex-shrink-0"
+                    className="p-1 rounded hover:bg-accent/20 text-accent-text transition-colors flex-shrink-0"
                     title="Copy Destination URL"
                   >
-                    {destinationCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    {destinationCopied ? <Check className="w-3.5 h-3.5 text-success-text" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <p className="text-[10px] text-zinc-400">
+                <p className="text-micro text-fg-muted">
                   Players are returned with a secure token. The human slider is unlocked <strong>strictly after Work.ink confirms completion</strong>.
                 </p>
               </div>
             )}
 
-            <form onSubmit={handleSaveCheckpoint} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveCheckpoint} className="space-y-4 text-caption">
               {/* Target Script Selector */}
               <div>
-                <label className="block text-gray-300 font-semibold mb-1">
+                <label className="block text-fg font-semibold mb-1">
                   Target Script
                 </label>
                 <select
                   value={cpScriptId}
                   onChange={(e) => setCpScriptId(e.target.value)}
-                  className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500"
+                  className="w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent"
                 >
                   <option value="all">All Scripts (Global Default)</option>
                   {scripts.map((s) => (
@@ -738,14 +712,14 @@ export default function CheckpointsPage() {
                     </option>
                   ))}
                 </select>
-                <p className="text-[10px] text-gray-500 mt-1">
+                <p className="text-micro text-fg-subtle mt-1">
                   Bind this checkpoint to a specific script (e.g. Trident vs Rivals) or all scripts.
                 </p>
               </div>
 
               {/* Title */}
               <div>
-                <label className="block text-gray-300 font-semibold mb-1">
+                <label className="block text-fg font-semibold mb-1">
                   Checkpoint Title
                 </label>
                 <input
@@ -753,13 +727,13 @@ export default function CheckpointsPage() {
                   value={cpTitle}
                   onChange={(e) => setCpTitle(e.target.value)}
                   placeholder={isWorkinkType ? "e.g. Work.ink Step #1" : "e.g. Visit Community Sponsor, Subscribe on YouTube"}
-                  className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500"
+                  className="w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent"
                 />
               </div>
 
               {/* Destination URL */}
               <div>
-                <label className="block text-gray-300 font-semibold mb-1">
+                <label className="block text-fg font-semibold mb-1">
                   {isWorkinkType ? "Work.ink Shortlink (URL)" : "Destination Link (URL)"}
                 </label>
                 <div className="relative">
@@ -768,11 +742,11 @@ export default function CheckpointsPage() {
                     value={cpUrl}
                     onChange={(e) => setCpUrl(e.target.value)}
                     placeholder={isWorkinkType ? "https://work.ink/..." : "https://linkvertise.com/... or https://discord.gg/..."}
-                    className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500 pr-9"
+                    className="w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent pr-9"
                   />
-                  <Link2 className="w-4 h-4 text-gray-500 absolute right-2.5 top-2.5" />
+                  <Link2 className="w-4 h-4 text-fg-subtle absolute right-2.5 top-2.5" />
                 </div>
-                <p className="text-[10px] text-gray-500 mt-1">
+                <p className="text-micro text-fg-subtle mt-1">
                   {isWorkinkType
                     ? "Paste your monetized Work.ink link generated in your publisher dashboard."
                     : "Users click this link in a new tab to complete this checkpoint step."}
@@ -783,20 +757,20 @@ export default function CheckpointsPage() {
               <div className="grid grid-cols-2 gap-3">
                 {isWorkinkType ? (
                   <div>
-                    <label className="block text-gray-300 font-semibold mb-1">
+                    <label className="block text-fg font-semibold mb-1">
                       Timer Setting
                     </label>
-                    <div className="w-full bg-[#0d0f17] border border-purple-500/40 rounded-lg px-3 py-2 text-purple-300 flex items-center gap-1.5 font-mono text-xs">
+                    <div className="w-full bg-surface border border-accent/40 rounded-lg px-3 py-2 text-accent-text flex items-center gap-1.5 font-data text-caption">
                       <WorkinkLogo className="w-3.5 h-3.5 flex-shrink-0" />
                       <span>No Timer (API)</span>
                     </div>
-                    <p className="text-[10px] text-gray-500 mt-0.5">Verified by Work.ink server.</p>
+                    <p className="text-micro text-fg-subtle mt-0.5">Verified by Work.ink server.</p>
                   </div>
                 ) : (
                   <div>
-                    <div className="flex justify-between text-gray-300 font-semibold mb-1">
+                    <div className="flex justify-between text-fg font-semibold mb-1">
                       <span>Duration (Timer)</span>
-                      <span className="font-mono text-emerald-400">{cpDuration}s</span>
+                      <span className="font-data text-success-text">{cpDuration}s</span>
                     </div>
                     <input
                       type="number"
@@ -804,14 +778,14 @@ export default function CheckpointsPage() {
                       max="120"
                       value={cpDuration}
                       onChange={(e) => setCpDuration(Number(e.target.value))}
-                      className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500"
+                      className="w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent"
                     />
-                    <p className="text-[10px] text-gray-500 mt-0.5">Seconds to wait</p>
+                    <p className="text-micro text-fg-subtle mt-0.5">Seconds to wait</p>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-gray-300 font-semibold mb-1">
+                  <label className="block text-fg font-semibold mb-1">
                     Step Order
                   </label>
                   <input
@@ -820,19 +794,19 @@ export default function CheckpointsPage() {
                     max="20"
                     value={cpOrder}
                     onChange={(e) => setCpOrder(Number(e.target.value))}
-                    className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-emerald-500"
+                    className="w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent"
                   />
-                  <p className="text-[10px] text-gray-500 mt-0.5">Step sequence (#1, #2, #3)</p>
+                  <p className="text-micro text-fg-subtle mt-0.5">Step sequence (#1, #2, #3)</p>
                 </div>
               </div>
 
               <button
                 type="submit"
                 disabled={savingCheckpoint}
-                className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
+                className={`w-full py-2.5 px-4 rounded-lg text-fg font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
                   isWorkinkType
-                    ? "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-600/20"
-                    : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20"
+                    ? "bg-accent hover:bg-accent-hover"
+                    : "bg-accent hover:bg-accent-hover"
                 }`}
               >
                 {savingCheckpoint ? (
@@ -849,27 +823,27 @@ export default function CheckpointsPage() {
 
           {/* Checkpoints List Panel */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#12141e] border border-gray-800 rounded-xl p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-raised border border-line rounded-lg p-4">
               <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-bold text-white">Configured Checkpoints</span>
-                <span className="text-[11px] text-gray-500">({filteredCheckpoints.length})</span>
+                <Globe className="w-4 h-4 text-success-text" />
+                <span className="text-caption font-bold text-fg">Configured Checkpoints</span>
+                <span className="text-micro text-fg-subtle">({filteredCheckpoints.length})</span>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={switchToWorkinkMode}
-                  className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-[11px] transition-all flex items-center gap-1.5 shadow-sm"
+                  className="bg-accent hover:bg-accent-hover px-2.5 py-1 rounded-lg text-accent-fg font-semibold text-micro transition-all flex items-center gap-1.5"
                 >
                   <WorkinkLogo className="w-3 h-3 flex-shrink-0" />
                   <span>+ Work.ink Checkpoint</span>
                 </button>
-                <span className="text-[11px] text-gray-400">Filter:</span>
+                <span className="text-micro text-fg-muted">Filter:</span>
                 <select
                   value={filterScript}
                   onChange={(e) => setFilterScript(e.target.value)}
-                  className="bg-[#0d0f17] border border-gray-700/80 rounded-lg px-2.5 py-1 text-xs text-white outline-none focus:border-emerald-500"
+                  className="bg-surface border border-line-strong rounded-lg px-2.5 py-1 text-caption text-fg outline-none focus:border-accent"
                 >
                   <option value="all">All Checkpoints</option>
                   {scripts.map((s) => (
@@ -882,7 +856,7 @@ export default function CheckpointsPage() {
             </div>
 
             {filteredCheckpoints.length === 0 ? (
-              <div className="p-8 text-center bg-[#12141e] border border-gray-800 rounded-xl text-gray-500 text-xs">
+              <div className="p-4 text-center bg-surface-raised border border-line rounded-lg text-fg-subtle text-caption">
                 No checkpoints configured for this selection yet. Add your first checkpoint using the form on the left.
               </div>
             ) : (
@@ -893,39 +867,39 @@ export default function CheckpointsPage() {
                   return (
                     <div
                       key={cp.id}
-                      className="p-4 bg-[#12141e] border border-gray-800 hover:border-gray-700 rounded-xl flex items-center justify-between gap-4 transition-all"
+                      className="p-4 bg-surface-raised border border-line hover:border-line-strong rounded-lg flex items-center justify-between gap-4 transition-all"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-mono text-xs font-bold flex-shrink-0 ${
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-data text-caption font-bold flex-shrink-0 ${
                             isWk
-                              ? "bg-purple-500/10 border border-purple-500/30 text-purple-300"
-                              : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                              ? "bg-accent/10 border border-accent/30 text-accent-text"
+                              : "bg-success/10 border border-success/20 text-success-text"
                           }`}
                         >
                           #{cp.order || idx + 1}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-xs font-bold text-white truncate">{cp.title}</h3>
+                            <h3 className="text-caption font-bold text-fg truncate">{cp.title}</h3>
                             <span
-                              className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+                              className={`text-micro px-2 py-0.5 rounded font-data ${
                                 cp.script_id === "all" || !cp.script_id
-                                  ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                  : "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                                  ? "bg-accent/10 text-accent-text border border-accent/20"
+                                  : "bg-accent/10 text-accent-text border border-accent/20"
                               }`}
                             >
                               {boundScript ? boundScript.name : "Global (All Scripts)"}
                             </span>
                           </div>
-                          <div className="flex items-center gap-3 text-[11px] text-gray-400 mt-1 truncate">
+                          <div className="flex items-center gap-3 text-micro text-fg-muted mt-1 truncate">
                             {isWk ? (
-                              <span className="flex items-center gap-1.5 font-mono text-purple-300 font-semibold text-[11px] px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/30">
+                              <span className="flex items-center gap-1.5 font-data text-accent-text font-semibold text-micro px-2 py-0.5 rounded bg-accent/10 border border-accent/30">
                                 <WorkinkLogo className="w-3.5 h-3.5 flex-shrink-0" />
                                 Work.ink (No Timer • API Verified)
                               </span>
                             ) : (
-                              <span className="flex items-center gap-1 font-mono text-emerald-400/90 text-[11px]">
+                              <span className="flex items-center gap-1 font-data text-success-text text-micro">
                                 <Clock className="w-3 h-3" />
                                 {cp.duration_seconds}s timer
                               </span>
@@ -934,7 +908,7 @@ export default function CheckpointsPage() {
                               href={cp.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-gray-400 hover:text-white flex items-center gap-1 truncate max-w-xs"
+                              className="text-fg-muted hover:text-fg flex items-center gap-1 truncate max-w-xs"
                             >
                               <ExternalLink className="w-3 h-3 flex-shrink-0" />
                               <span className="truncate">{cp.url}</span>
@@ -947,14 +921,14 @@ export default function CheckpointsPage() {
                         <button
                           type="button"
                           onClick={() => handleEditCheckpoint(cp)}
-                          className="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs transition-colors"
+                          className="px-2.5 py-1.5 rounded-lg bg-surface-hover hover:bg-surface-active text-fg text-caption transition-colors"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteCheckpoint(cp.id)}
-                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors"
+                          className="p-1.5 rounded-lg bg-danger/10 hover:bg-danger/20 text-danger-text transition-colors"
                           title="Delete Checkpoint"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -973,16 +947,16 @@ export default function CheckpointsPage() {
       {/* TAB 2: GUNS.LOL CREATOR PROFILE CUSTOMIZER */}
       {/* ========================================================================= */}
       {activeTab === "profile" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Profile Form Controls */}
-          <div className="lg:col-span-6 bg-[#12141e] border border-gray-800 rounded-xl p-5 shadow-xl space-y-5">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+          <div className="lg:col-span-6 bg-surface-raised border border-line rounded-lg p-4 space-y-5">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <div>
-                <h2 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
-                  <User className="w-4 h-4 text-purple-400" />
+                <h2 className="text-caption font-bold text-fg flex items-center gap-2">
+                  <User className="w-4 h-4 text-accent-text" />
                   Guns.lol Profile Settings
                 </h2>
-                <p className="text-[11px] text-gray-400 mt-0.5">
+                <p className="text-micro text-fg-muted mt-0.5">
                   Customize avatar, display name, bio, social links, and emblems displayed to users on the claim key portal.
                 </p>
               </div>
@@ -991,11 +965,11 @@ export default function CheckpointsPage() {
                 type="button"
                 onClick={handleSaveProfile}
                 disabled={savingProfile}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-lg shadow-purple-600/20 transition-all disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-caption font-semibold transition-all disabled:opacity-50"
               >
                 {profileSuccess ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-300" />
+                    <Check className="w-3.5 h-3.5 text-success-text" />
                     <span>Saved</span>
                   </>
                 ) : (
@@ -1008,21 +982,21 @@ export default function CheckpointsPage() {
             </div>
 
             {profileError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl text-xs flex items-center gap-2">
+              <div className="p-3 bg-danger/10 border border-danger/30 text-danger-text rounded-lg text-caption flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{profileError}</span>
               </div>
             )}
 
-            <div className="space-y-4 text-xs">
+            <div className="space-y-4 text-caption">
               {/* One-Click Sync from Guns.lol */}
-              <div className="p-3.5 bg-gradient-to-r from-purple-950/40 via-purple-900/20 to-blue-950/40 border border-purple-500/30 rounded-xl space-y-2">
+              <div className="p-3.5 border border-accent/30 rounded-lg space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5 uppercase tracking-wider">
-                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-micro font-bold text-accent-text flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-accent-text" />
                     One-Click Sync from Guns.lol
                   </span>
-                  {syncSuccess && <span className="text-[10px] text-emerald-400 font-medium font-mono">✓ Profile Synced!</span>}
+                  {syncSuccess && <span className="text-micro text-success-text font-medium font-data">✓ Profile Synced!</span>}
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -1030,24 +1004,24 @@ export default function CheckpointsPage() {
                     value={gunsUsername}
                     onChange={(e) => setGunsUsername(e.target.value)}
                     placeholder="guns.lol username or URL (e.g. revile or https://guns.lol/revile)"
-                    className="flex-1 bg-[#0d0f17] border border-gray-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-purple-500 font-mono"
+                    className="flex-1 bg-surface border border-line-strong rounded-lg px-2.5 py-1.5 text-caption text-fg outline-none focus:border-accent font-data"
                   />
                   <button
                     type="button"
                     disabled={syncingGuns || !gunsUsername.trim()}
                     onClick={handleSyncGuns}
-                    className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-md shadow-purple-600/20"
+                    className="px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-50 text-accent-fg font-semibold text-caption transition-all flex items-center gap-1.5"
                   >
                     {syncingGuns ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                     <span>{syncingGuns ? "Syncing..." : "Sync from Guns.lol"}</span>
                   </button>
                 </div>
-                {syncError && <p className="text-[10px] text-rose-400 mt-1">{syncError}</p>}
+                {syncError && <p className="text-micro text-danger-text mt-1">{syncError}</p>}
               </div>
 
               {/* Avatar URL & Presets */}
               <div>
-                <label className="block text-gray-300 font-semibold mb-1">
+                <label className="block text-fg font-semibold mb-1">
                   Profile Picture (PFP URL)
                 </label>
                 <div className="flex items-center gap-2">
@@ -1056,11 +1030,11 @@ export default function CheckpointsPage() {
                     value={profile.avatar_url}
                     onChange={(e) => setProfile((p) => ({ ...p, avatar_url: e.target.value }))}
                     placeholder="https://..."
-                    className="flex-1 bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-purple-500"
+                    className="flex-1 bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent"
                   />
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[10px] text-gray-500">Avatar Presets:</span>
+                  <span className="text-micro text-fg-subtle">Avatar Presets:</span>
                   {[
                     "https://api.dicebear.com/7.x/bottts/svg?seed=Revile21",
                     "https://api.dicebear.com/7.x/identicon/svg?seed=TridentApex",
@@ -1070,7 +1044,7 @@ export default function CheckpointsPage() {
                       key={i}
                       type="button"
                       onClick={() => setProfile((p) => ({ ...p, avatar_url: preset }))}
-                      className="w-6 h-6 rounded-full overflow-hidden border border-gray-700 hover:border-purple-500 transition-colors"
+                      className="w-6 h-6 rounded-full overflow-hidden border border-line-strong hover:border-accent/60 transition-colors"
                     >
                       <img src={preset} alt="preset" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     </button>
@@ -1080,7 +1054,7 @@ export default function CheckpointsPage() {
 
               {/* Display Name */}
               <div>
-                <label className="block text-gray-300 font-semibold mb-1">
+                <label className="block text-fg font-semibold mb-1">
                   Display Name
                 </label>
                 <input
@@ -1088,13 +1062,13 @@ export default function CheckpointsPage() {
                   value={profile.display_name}
                   onChange={(e) => setProfile((p) => ({ ...p, display_name: e.target.value }))}
                   placeholder="e.g. Revile"
-                  className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-purple-500"
+                  className="w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent"
                 />
               </div>
 
               {/* Bio */}
               <div>
-                <label className="block text-gray-300 font-semibold mb-1">
+                <label className="block text-fg font-semibold mb-1">
                   Bio / Description
                 </label>
                 <textarea
@@ -1102,25 +1076,25 @@ export default function CheckpointsPage() {
                   value={profile.bio}
                   onChange={(e) => setProfile((p) => ({ ...p, bio: e.target.value }))}
                   placeholder="Tell users about your scripts and development community..."
-                  className="w-full bg-[#0d0f17] border border-gray-700/80 rounded-lg px-3 py-2 text-white outline-none focus:border-purple-500"
+                  className="w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent"
                 />
               </div>
 
               {/* Quick Badge Toggles & Custom Emblems */}
-              <div className="pt-2 border-t border-gray-800 space-y-3">
+              <div className="pt-2 border-t border-line space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-gray-300 font-semibold flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  <label className="text-fg font-semibold flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-accent-text" />
                     Guns.lol Emblems & Badges
                   </label>
-                  <span className="text-[10px] text-gray-500 font-mono">
+                  <span className="text-micro text-fg-subtle font-data">
                     {profile.emblems?.length || 0} active
                   </span>
                 </div>
 
                 {/* Quick Toggle Presets */}
                 <div className="space-y-1.5">
-                  <span className="text-[10px] text-gray-400 block font-medium">Quick Preset Badges:</span>
+                  <span className="text-micro text-fg-muted block font-medium">Quick Preset Badges:</span>
                   <div className="flex flex-wrap gap-1.5">
                     {BADGE_PRESETS.map((bp) => {
                       const isActive = (profile.emblems || []).some((e) => e.label === bp.label);
@@ -1129,15 +1103,15 @@ export default function CheckpointsPage() {
                           key={bp.label}
                           type="button"
                           onClick={() => toggleBadgePreset(bp)}
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border flex items-center gap-1 transition-all ${
+                          className={`px-2.5 py-1 rounded-full text-micro font-semibold border flex items-center gap-1 transition-all ${
                             isActive
-                              ? "bg-purple-600/20 border-purple-500 text-purple-300 shadow-sm"
-                              : "bg-[#0d0f17] border-gray-800 text-gray-400 hover:text-gray-200 hover:border-gray-700"
+                              ? "bg-accent/20 border-accent/60 text-accent-text"
+                              : "bg-surface border-line text-fg-muted hover:text-fg hover:border-line-strong"
                           }`}
                         >
                           {renderEmblemIcon(bp.icon)}
                           <span>{bp.label}</span>
-                          <span className="text-[9px] font-bold">{isActive ? "✓" : "+"}</span>
+                          <span className="text-micro font-bold">{isActive ? "✓" : "+"}</span>
                         </button>
                       );
                     })}
@@ -1149,7 +1123,7 @@ export default function CheckpointsPage() {
                   {(profile.emblems || []).map((emb) => (
                     <div
                       key={emb.id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border shadow-sm"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-micro font-semibold border"
                       style={{
                         backgroundColor: `${emb.color || "#3b82f6"}15`,
                         borderColor: `${emb.color || "#3b82f6"}40`,
@@ -1161,7 +1135,7 @@ export default function CheckpointsPage() {
                       <button
                         type="button"
                         onClick={() => handleRemoveEmblem(emb.id)}
-                        className="ml-1 opacity-60 hover:opacity-100 hover:text-rose-400"
+                        className="ml-1 opacity-60 hover:opacity-100 hover:text-danger-text"
                         title="Remove emblem"
                       >
                         ✕
@@ -1177,13 +1151,13 @@ export default function CheckpointsPage() {
                     value={newEmblemLabel}
                     onChange={(e) => setNewEmblemLabel(e.target.value)}
                     placeholder="Custom badge label..."
-                    className="col-span-5 bg-[#0d0f17] border border-gray-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-purple-500"
+                    className="col-span-5 bg-surface border border-line-strong rounded-lg px-2.5 py-1.5 text-caption text-fg outline-none focus:border-accent"
                   />
 
                   <select
                     value={newEmblemIcon}
                     onChange={(e) => setNewEmblemIcon(e.target.value)}
-                    className="col-span-4 bg-[#0d0f17] border border-gray-700/80 rounded-lg px-2 py-1.5 text-xs text-white outline-none focus:border-purple-500"
+                    className="col-span-4 bg-surface border border-line-strong rounded-lg px-2 py-1.5 text-caption text-fg outline-none focus:border-accent"
                   >
                     <option value="verified">Verified</option>
                     <option value="crown">Crown</option>
@@ -1194,7 +1168,7 @@ export default function CheckpointsPage() {
                     <option value="skull">Skull</option>
                   </select>
 
-                  <div className="col-span-2 flex items-center justify-center bg-[#0d0f17] border border-gray-700/80 rounded-lg p-1">
+                  <div className="col-span-2 flex items-center justify-center bg-surface border border-line-strong rounded-lg p-1">
                     <input
                       type="color"
                       value={newEmblemColor}
@@ -1207,7 +1181,7 @@ export default function CheckpointsPage() {
                   <button
                     type="button"
                     onClick={handleAddEmblem}
-                    className="col-span-1 flex items-center justify-center rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold"
+                    className="col-span-1 flex items-center justify-center rounded-lg bg-accent hover:bg-accent-hover text-accent-fg font-bold"
                     title="Add Emblem"
                   >
                     +
@@ -1216,13 +1190,13 @@ export default function CheckpointsPage() {
               </div>
 
               {/* 9 Social Platforms Section */}
-              <div className="pt-2 border-t border-gray-800 space-y-3">
+              <div className="pt-2 border-t border-line space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-gray-300 font-semibold flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-purple-400" />
+                  <label className="text-fg font-semibold flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-accent-text" />
                     Social Media Platforms (9 Supported)
                   </label>
-                  <span className="text-[10px] text-gray-500">Toggle on/off & set custom links</span>
+                  <span className="text-micro text-fg-subtle">Toggle on/off & set custom links</span>
                 </div>
 
                 <div className="space-y-2.5">
@@ -1233,32 +1207,32 @@ export default function CheckpointsPage() {
                     return (
                       <div
                         key={platform.key}
-                        className={`p-2.5 rounded-xl border transition-all ${
+                        className={`p-2.5 rounded-lg border transition-all ${
                           isEnabled
-                            ? "bg-[#0d0f17] border-gray-800"
-                            : "bg-[#090b10] border-gray-800/40 opacity-50"
+                            ? "bg-surface border-line"
+                            : "bg-surface border-line-subtle opacity-50"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <div className="flex items-center gap-2">
                             <span
-                              className="w-5 h-5 rounded-md flex items-center justify-center text-white"
+                              className="w-5 h-5 rounded-md flex items-center justify-center text-fg"
                               style={{ backgroundColor: `${platform.color}30`, color: platform.color }}
                             >
                               <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
                                 <path d={platform.path} />
                               </svg>
                             </span>
-                            <span className="text-xs font-semibold text-gray-200">{platform.name}</span>
+                            <span className="text-caption font-semibold text-fg">{platform.name}</span>
                           </div>
 
                           <button
                             type="button"
                             onClick={() => toggleSocialEnabled(platform.key)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase transition-colors ${
+                            className={`px-2 py-0.5 rounded text-micro font-bold transition-colors ${
                               isEnabled
-                                ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                                : "bg-gray-800 text-gray-500"
+                                ? "bg-success/15 text-success-text border border-success/30"
+                                : "bg-surface-hover text-fg-subtle"
                             }`}
                           >
                             {isEnabled ? "Visible" : "Hidden"}
@@ -1279,7 +1253,7 @@ export default function CheckpointsPage() {
                             }))
                           }
                           placeholder={platform.placeholder}
-                          className="w-full bg-[#12141e] border border-gray-700/70 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-purple-500 font-mono"
+                          className="w-full bg-surface-raised border border-line-strong rounded-lg px-2.5 py-1.5 text-caption text-fg outline-none focus:border-accent font-data"
                         />
                       </div>
                     );
@@ -1292,27 +1266,25 @@ export default function CheckpointsPage() {
           {/* Live Guns.lol Profile Card Simulator */}
           <div className="lg:col-span-6 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-purple-400"></span> Live Guns.lol Card Simulator
+              <h3 className="text-caption font-bold text-fg-muted flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-accent"></span> Live Guns.lol Card Simulator
               </h3>
-              <span className="text-[11px] text-gray-500 font-mono">
+              <span className="text-micro text-fg-subtle font-data">
                 Shown to Claimants on /claim
               </span>
             </div>
 
             {/* Guns.lol Card Canvas */}
-            <div className="p-8 rounded-2xl border border-gray-800 bg-gradient-to-b from-[#141624] via-[#0f111c] to-[#0a0c13] shadow-2xl relative overflow-hidden text-center flex flex-col items-center">
+            <div className="p-4 rounded-lg border border-line relative overflow-hidden text-center flex flex-col items-center">
               {/* Background ambient lighting */}
-              <div className="absolute -top-16 -left-16 w-48 h-48 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
 
               {/* Avatar with guns.lol glowing ring & status pulse */}
               <div className="relative mb-3.5 group">
-                <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-purple-500 via-blue-500 to-emerald-400 shadow-xl shadow-purple-500/20">
+                <div className="bg-accent hover:bg-accent-hover w-20 h-20 rounded-full p-1">
                   <img
                     src={profile.avatar_url || "https://api.dicebear.com/7.x/bottts/svg?seed=Revile21"}
                     alt="avatar"
-                    className="w-full h-full rounded-full object-cover bg-black"
+                    className="w-full h-full rounded-full object-cover bg-canvas"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src =
@@ -1320,14 +1292,14 @@ export default function CheckpointsPage() {
                     }}
                   />
                 </div>
-                <span className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-[#12141e] animate-pulse" />
+                <span className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-success border-2 border-surface-raised" />
               </div>
 
               {/* Display Name with Badges */}
-              <h2 className="text-lg font-extrabold text-white tracking-wide flex items-center justify-center gap-1.5">
+              <h2 className="text-lg font-extrabold text-fg tracking-wide flex items-center justify-center gap-1.5">
                 <span>{profile.display_name || "Revile"}</span>
                 <span title="Verified Developer">
-                  <Sparkles className="w-4 h-4 text-blue-400" />
+                  <Sparkles className="w-4 h-4 text-accent-text" />
                 </span>
               </h2>
 
@@ -1336,7 +1308,7 @@ export default function CheckpointsPage() {
                 {(profile.emblems || []).map((emb) => (
                   <div
                     key={emb.id}
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border backdrop-blur-sm"
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-micro font-bold tracking-wide border"
                     style={{
                       backgroundColor: `${emb.color || "#3b82f6"}15`,
                       borderColor: `${emb.color || "#3b82f6"}50`,
@@ -1350,7 +1322,7 @@ export default function CheckpointsPage() {
               </div>
 
               {/* Bio */}
-              <p className="text-xs text-gray-300/90 max-w-sm leading-relaxed mb-4">
+              <p className="text-caption text-fg max-w-sm leading-relaxed mb-4">
                 {profile.bio || "Lead Developer & Script Engineer."}
               </p>
 
@@ -1367,7 +1339,7 @@ export default function CheckpointsPage() {
                       href={link}
                       target="_blank"
                       rel="noreferrer"
-                      className="px-3 py-1.5 rounded-xl bg-gray-800/80 hover:brightness-125 text-gray-200 hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 shadow-sm border border-gray-700/60"
+                      className="px-3 py-1.5 rounded-lg bg-surface-hover hover:brightness-125 text-fg hover:text-fg transition-all text-caption font-semibold flex items-center gap-1.5 border border-line-strong"
                       style={{ borderLeftColor: platform.color, borderLeftWidth: "3px" }}
                     >
                       <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" style={{ color: platform.color }}>
@@ -1380,9 +1352,9 @@ export default function CheckpointsPage() {
               </div>
 
               {/* Simulated Script Key Claim Badge */}
-              <div className="mt-5 w-full pt-4 border-t border-gray-800/80 flex items-center justify-between text-[11px] text-gray-400">
-                <span className="font-mono">Gate Status: Active</span>
-                <span className="text-emerald-400 font-semibold flex items-center gap-1">
+              <div className="mt-5 w-full pt-4 border-t border-line flex items-center justify-between text-micro text-fg-muted">
+                <span className="font-data">Gate Status: Active</span>
+                <span className="text-success-text font-semibold flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> Ready for Claimants
                 </span>
               </div>
@@ -1395,37 +1367,36 @@ export default function CheckpointsPage() {
       {/* TAB 3: CHECKPOINT ANALYTICS & BYPASS SHIELD LOGS */}
       {/* ========================================================================= */}
       {activeTab === "bypass_attempts" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Top Header Banner & Filter */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-[#111625] via-[#101420] to-[#171226] border border-cyan-500/30 shadow-2xl relative overflow-hidden">
-            <div className="absolute -right-16 -top-16 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-lg border border-accent/30 relative overflow-hidden">
             <div className="flex items-center gap-3.5 relative z-10">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0 shadow-lg shadow-cyan-500/10">
+              <div className="w-12 h-12 rounded-lg border border-accent/30 flex items-center justify-center text-accent-text shrink-0">
                 <BarChart3 className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2.5">
+                <h3 className="text-base font-bold text-fg flex items-center gap-2.5">
                   <span>Checkpoint Analytics & Funnel Intelligence</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                  <span className="px-2 py-0.5 rounded-full text-micro font-data bg-accent/10 text-accent-text border border-accent/30">
                     Live Telemetry
                   </span>
                 </h3>
-                <p className="text-xs text-zinc-400 mt-1 max-w-2xl leading-relaxed">
+                <p className="text-caption text-fg-muted mt-1 max-w-2xl leading-relaxed">
                   Full real-time visibility into checkpoint page visitors, full completions, exactly what checkpoint users stopped or abandoned on, and fortress anti-bypass lockouts.
                 </p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2.5 shrink-0 relative z-10">
               {/* Script Scope Selector */}
-              <div className="flex items-center gap-2 bg-[#0d0f17] px-3 py-1.5 rounded-xl border border-gray-800 text-xs font-mono">
-                <span className="text-zinc-500">Scope:</span>
+              <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-lg border border-line text-caption font-data">
+                <span className="text-fg-subtle">Scope:</span>
                 <select
                   value={filterScript}
                   onChange={(e) => {
                     setFilterScript(e.target.value);
                     fetchBypassData(e.target.value);
                   }}
-                  className="bg-transparent text-white outline-none cursor-pointer"
+                  className="bg-transparent text-fg outline-none cursor-pointer"
                 >
                   <option value="all">All Scripts</option>
                   {scripts.map((s) => (
@@ -1439,7 +1410,7 @@ export default function CheckpointsPage() {
                 type="button"
                 onClick={() => fetchBypassData()}
                 disabled={loadingBypass}
-                className="px-3.5 py-1.5 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/60 border border-cyan-500/40 text-xs font-semibold text-cyan-200 hover:text-white flex items-center gap-1.5 transition-all shadow-sm"
+                className="px-3.5 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/10 border border-accent/40 text-caption font-semibold text-accent-text hover:text-fg flex items-center gap-1.5 transition-all"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loadingBypass ? "animate-spin" : ""}`} />
                 <span>Refresh Data</span>
@@ -1450,74 +1421,74 @@ export default function CheckpointsPage() {
           {/* 4 Primary Analytics KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Metric 1: Total Visitors */}
-            <div className="p-5 rounded-2xl bg-[#12141e] border border-gray-800/80 hover:border-cyan-500/40 transition-all shadow-xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-bl-full pointer-events-none group-hover:bg-cyan-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-zinc-400 text-xs mb-2 font-mono">
-                <span className="tracking-wider uppercase text-[11px] font-bold text-zinc-400">Visited Page</span>
-                <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+            <div className="p-4 rounded-lg bg-surface-raised border border-line hover:border-accent/40 transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-accent/5 rounded-bl-full pointer-events-none group-hover:bg-accent/10 transition-colors" />
+              <div className="flex items-center justify-between text-fg-muted text-caption mb-2 font-data">
+                <span className="text-micro font-bold text-fg-muted">Visited Page</span>
+                <div className="p-2 rounded-lg bg-accent/10 text-accent-text border border-accent/20">
                   <Users className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-3xl font-extrabold text-white font-mono tracking-tight">
+              <div className="text-3xl font-extrabold text-fg font-data tracking-tight">
                 {checkpointAnalytics.total_visitors.toLocaleString()}
               </div>
-              <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-2 font-mono pt-2 border-t border-gray-800/60">
+              <div className="flex items-center justify-between text-micro text-fg-muted mt-2 font-data pt-2 border-t border-line-subtle">
                 <span>Unique Visitors:</span>
-                <span className="text-cyan-400 font-bold">{checkpointAnalytics.unique_visitors.toLocaleString()} IPs</span>
+                <span className="text-accent-text font-bold">{checkpointAnalytics.unique_visitors.toLocaleString()} IPs</span>
               </div>
             </div>
 
             {/* Metric 2: Completed Fully */}
-            <div className="p-5 rounded-2xl bg-[#12141e] border border-gray-800/80 hover:border-emerald-500/40 transition-all shadow-xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-bl-full pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-zinc-400 text-xs mb-2 font-mono">
-                <span className="tracking-wider uppercase text-[11px] font-bold text-zinc-400">Completed Fully</span>
-                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="p-4 rounded-lg bg-surface-raised border border-line hover:border-success/40 transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-success/5 rounded-bl-full pointer-events-none group-hover:bg-success/10 transition-colors" />
+              <div className="flex items-center justify-between text-fg-muted text-caption mb-2 font-data">
+                <span className="text-micro font-bold text-fg-muted">Completed Fully</span>
+                <div className="p-2 rounded-lg bg-success/10 text-success-text border border-success/20">
                   <CheckCircle2 className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-3xl font-extrabold text-emerald-400 font-mono tracking-tight">
+              <div className="text-3xl font-extrabold text-success-text font-data tracking-tight">
                 {checkpointAnalytics.total_completed.toLocaleString()}
               </div>
-              <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-2 font-mono pt-2 border-t border-gray-800/60">
+              <div className="flex items-center justify-between text-micro text-fg-muted mt-2 font-data pt-2 border-t border-line-subtle">
                 <span>Unique Completed:</span>
-                <span className="text-emerald-400 font-bold">{checkpointAnalytics.unique_completed.toLocaleString()} IPs</span>
+                <span className="text-success-text font-bold">{checkpointAnalytics.unique_completed.toLocaleString()} IPs</span>
               </div>
             </div>
 
             {/* Metric 3: Overall Conversion Rate */}
-            <div className="p-5 rounded-2xl bg-[#12141e] border border-gray-800/80 hover:border-blue-500/40 transition-all shadow-xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-full pointer-events-none group-hover:bg-blue-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-zinc-400 text-xs mb-2 font-mono">
-                <span className="tracking-wider uppercase text-[11px] font-bold text-zinc-400">Completion Rate</span>
-                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <div className="p-4 rounded-lg bg-surface-raised border border-line hover:border-accent/40 transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-accent/5 rounded-bl-full pointer-events-none group-hover:bg-accent/10 transition-colors" />
+              <div className="flex items-center justify-between text-fg-muted text-caption mb-2 font-data">
+                <span className="text-micro font-bold text-fg-muted">Completion Rate</span>
+                <div className="p-2 rounded-lg bg-accent/10 text-accent-text border border-accent/20">
                   <TrendingUp className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-3xl font-extrabold text-blue-400 font-mono tracking-tight">
+              <div className="text-3xl font-extrabold text-accent-text font-data tracking-tight">
                 {checkpointAnalytics.completion_rate}%
               </div>
-              <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-2 font-mono pt-2 border-t border-gray-800/60">
+              <div className="flex items-center justify-between text-micro text-fg-muted mt-2 font-data pt-2 border-t border-line-subtle">
                 <span>Passed / Started:</span>
-                <span className="text-zinc-200">{checkpointAnalytics.total_completed}/{checkpointAnalytics.total_visitors || 0}</span>
+                <span className="text-fg">{checkpointAnalytics.total_completed}/{checkpointAnalytics.total_visitors || 0}</span>
               </div>
             </div>
 
             {/* Metric 4: Total Users Stopped (Drop-Offs) */}
-            <div className="p-5 rounded-2xl bg-[#12141e] border border-gray-800/80 hover:border-amber-500/40 transition-all shadow-xl relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-bl-full pointer-events-none group-hover:bg-amber-500/10 transition-colors" />
-              <div className="flex items-center justify-between text-zinc-400 text-xs mb-2 font-mono">
-                <span className="tracking-wider uppercase text-[11px] font-bold text-zinc-400">Users Stopped (Drop-Off)</span>
-                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <div className="p-4 rounded-lg bg-surface-raised border border-line hover:border-warning/40 transition-all relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-warning/5 rounded-bl-full pointer-events-none group-hover:bg-warning/10 transition-colors" />
+              <div className="flex items-center justify-between text-fg-muted text-caption mb-2 font-data">
+                <span className="text-micro font-bold text-fg-muted">Users Stopped (Drop-Off)</span>
+                <div className="p-2 rounded-lg bg-warning/10 text-warning-text border border-warning/20">
                   <ArrowDownRight className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-3xl font-extrabold text-amber-400 font-mono tracking-tight">
+              <div className="text-3xl font-extrabold text-warning-text font-data tracking-tight">
                 {checkpointAnalytics.total_dropped.toLocaleString()}
               </div>
-              <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-2 font-mono pt-2 border-t border-gray-800/60">
+              <div className="flex items-center justify-between text-micro text-fg-muted mt-2 font-data pt-2 border-t border-line-subtle">
                 <span>Drop-Off Rate:</span>
-                <span className="text-amber-400 font-bold">{checkpointAnalytics.drop_rate}%</span>
+                <span className="text-warning-text font-bold">{checkpointAnalytics.drop_rate}%</span>
               </div>
             </div>
           </div>
@@ -1525,28 +1496,28 @@ export default function CheckpointsPage() {
           {/* ========================================================================= */}
           {/* WHAT CHECKPOINT USERS STOPPED ON — DETAILED DROP-OFF FUNNEL */}
           {/* ========================================================================= */}
-          <div className="bg-[#12141e] border border-gray-800 rounded-2xl p-6 shadow-xl space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-4">
+          <div className="bg-surface-raised border border-line rounded-lg p-4 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-4">
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-                  <Layers className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-body-sm font-bold text-fg flex items-center gap-2 font-data">
+                  <Layers className="w-4 h-4 text-accent-text" />
                   <span>What Checkpoint Users Stopped On (Funnel Drop-Off)</span>
                 </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
+                <p className="text-caption text-fg-muted mt-0.5">
                   Pinpoint exactly where users abandoned during the claim funnel so you can optimize task difficulty and duration.
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 bg-[#0d0f17] px-3 py-1.5 rounded-xl border border-gray-800">
+              <div className="flex items-center gap-2 text-caption font-data text-fg-muted bg-surface px-3 py-1.5 rounded-lg border border-line">
                 <span>Active Steps:</span>
-                <span className="text-white font-bold">{checkpointAnalytics.step_funnel.length}</span>
+                <span className="text-fg font-bold">{checkpointAnalytics.step_funnel.length}</span>
               </div>
             </div>
 
             {checkpointAnalytics.step_funnel.length === 0 ? (
-              <div className="text-center py-10 text-zinc-500 text-xs font-mono">
-                <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-zinc-600" />
+              <div className="text-center py-10 text-fg-subtle text-caption font-data">
+                <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-fg-disabled" />
                 <p>No checkpoints configured yet.</p>
-                <p className="text-[11px] text-zinc-600 mt-1">Add your first checkpoint in the 'Checkpoints Setup' tab to begin tracking funnel progression.</p>
+                <p className="text-micro text-fg-disabled mt-1">Add your first checkpoint in the 'Checkpoints Setup' tab to begin tracking funnel progression.</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1557,36 +1528,36 @@ export default function CheckpointsPage() {
                   return (
                     <div
                       key={step.id || idx}
-                      className={`p-4 rounded-xl border transition-all ${
+                      className={`p-4 rounded-lg border transition-all ${
                         isHighestDrop
-                          ? "bg-gradient-to-r from-amber-950/20 via-[#141622] to-[#12141e] border-amber-500/30 shadow-lg"
-                          : "bg-[#0e1017] border-gray-800/80 hover:border-gray-700"
+                          ? "border-warning/30"
+                          : "bg-surface border-line hover:border-line-strong"
                       }`}
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                         {/* Step Details & Info */}
                         <div className="space-y-1.5 flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                            <span className="px-2 py-0.5 rounded-md text-micro font-data font-bold bg-accent/10 text-accent-text border border-accent/30">
                               Step {step.order || idx + 1}
                             </span>
-                            <h4 className="text-sm font-bold text-white truncate">{step.title}</h4>
+                            <h4 className="text-body-sm font-bold text-fg truncate">{step.title}</h4>
                             {isHighestDrop && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded text-micro font-bold font-data bg-warning/20 text-warning-text border border-warning/40 flex items-center gap-1">
                                 <AlertTriangle className="w-3 h-3" /> Highest Drop-Off Point
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-3 text-[11px] font-mono text-zinc-400">
+                          <div className="flex items-center gap-3 text-micro font-data text-fg-muted">
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-zinc-500" /> {step.duration_seconds}s Dwell
+                              <Clock className="w-3 h-3 text-fg-subtle" /> {step.duration_seconds}s Dwell
                             </span>
-                            <span className="text-zinc-600">•</span>
+                            <span className="text-fg-disabled">•</span>
                             <a
                               href={step.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-zinc-400 hover:text-cyan-400 flex items-center gap-1 truncate max-w-xs transition-colors"
+                              className="text-fg-muted hover:text-accent-text flex items-center gap-1 truncate max-w-xs transition-colors"
                             >
                               <span className="truncate">{step.url}</span>
                               <ExternalLink className="w-2.5 h-2.5 shrink-0" />
@@ -1595,45 +1566,45 @@ export default function CheckpointsPage() {
                         </div>
 
                         {/* Step Funnel Statistics */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0 font-mono text-xs">
-                          <div className="bg-[#141724] px-3 py-2 rounded-lg border border-gray-800 text-center min-w-[90px]">
-                            <span className="text-[10px] text-zinc-400 block">Reached Step</span>
-                            <span className="text-sm font-bold text-white">{step.reached_count.toLocaleString()}</span>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0 font-data text-caption">
+                          <div className="bg-surface-raised px-3 py-2 rounded-lg border border-line text-center min-w-[90px]">
+                            <span className="text-micro text-fg-muted block">Reached Step</span>
+                            <span className="text-body-sm font-bold text-fg">{step.reached_count.toLocaleString()}</span>
                           </div>
-                          <div className="bg-[#141724] px-3 py-2 rounded-lg border border-gray-800 text-center min-w-[90px]">
-                            <span className="text-[10px] text-zinc-400 block">Passed Step</span>
-                            <span className="text-sm font-bold text-emerald-400">{step.completed_count.toLocaleString()}</span>
+                          <div className="bg-surface-raised px-3 py-2 rounded-lg border border-line text-center min-w-[90px]">
+                            <span className="text-micro text-fg-muted block">Passed Step</span>
+                            <span className="text-body-sm font-bold text-success-text">{step.completed_count.toLocaleString()}</span>
                           </div>
-                          <div className="bg-amber-950/20 px-3 py-2 rounded-lg border border-amber-500/30 text-center min-w-[110px]">
-                            <span className="text-[10px] text-amber-300 font-semibold block">Stopped Here</span>
-                            <span className="text-sm font-bold text-amber-400">
+                          <div className="bg-warning/10 px-3 py-2 rounded-lg border border-warning/30 text-center min-w-[110px]">
+                            <span className="text-micro text-warning-text font-semibold block">Stopped Here</span>
+                            <span className="text-body-sm font-bold text-warning-text">
                               {step.stopped_count.toLocaleString()}
-                              <span className="text-[10px] text-amber-300 font-normal ml-1">({step.stopped_percentage}%)</span>
+                              <span className="text-micro text-warning-text font-normal ml-1">({step.stopped_percentage}%)</span>
                             </span>
                           </div>
-                          <div className="bg-[#141724] px-3 py-2 rounded-lg border border-gray-800 text-center min-w-[90px]">
-                            <span className="text-[10px] text-zinc-400 block">Retention</span>
-                            <span className="text-sm font-bold text-cyan-400">{step.retention_percentage}%</span>
+                          <div className="bg-surface-raised px-3 py-2 rounded-lg border border-line text-center min-w-[90px]">
+                            <span className="text-micro text-fg-muted block">Retention</span>
+                            <span className="text-body-sm font-bold text-accent-text">{step.retention_percentage}%</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Visual Funnel Conversion Bar */}
-                      <div className="mt-3 pt-3 border-t border-gray-800/60">
-                        <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 mb-1.5">
+                      <div className="mt-3 pt-3 border-t border-line-subtle">
+                        <div className="flex items-center justify-between text-micro font-data text-fg-muted mb-1.5">
                           <span>Step Conversion Flow:</span>
-                          <span className="text-zinc-300">
-                            <strong className="text-emerald-400">{step.completed_count} passed</strong> • <strong className="text-amber-400">{step.stopped_count} stopped</strong>
+                          <span className="text-fg">
+                            <strong className="text-success-text">{step.completed_count} passed</strong> • <strong className="text-warning-text">{step.stopped_count} stopped</strong>
                           </span>
                         </div>
-                        <div className="w-full h-2 rounded-full bg-[#1b1f2e] overflow-hidden flex">
+                        <div className="w-full h-2 rounded-full bg-surface-hover overflow-hidden flex">
                           <div
-                            className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 transition-all duration-500"
+                            className="bg-accent hover:bg-accent-hover h-full transition-all duration-500"
                             style={{ width: `${Math.min(100, step.retention_percentage)}%` }}
                             title={`${step.completed_count} passed step (${step.retention_percentage}%)`}
                           />
                           <div
-                            className="h-full bg-amber-500 transition-all duration-500"
+                            className="h-full bg-warning transition-all duration-500"
                             style={{ width: `${Math.max(0, 100 - step.retention_percentage)}%` }}
                             title={`${step.stopped_count} stopped here`}
                           />
@@ -1649,63 +1620,63 @@ export default function CheckpointsPage() {
           {/* ========================================================================= */}
           {/* RECENT CHECKPOINT USER JOURNEYS (LIVE STREAM) */}
           {/* ========================================================================= */}
-          <div className="bg-[#12141e] border border-gray-800 rounded-2xl p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+          <div className="bg-surface-raised border border-line rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono">
+                <Activity className="w-4 h-4 text-success-text" />
+                <h3 className="text-caption font-bold text-fg font-data">
                   Recent Checkpoint User Journeys ({checkpointAnalytics.recent_activity.length})
                 </h3>
               </div>
-              <span className="text-[11px] font-mono text-zinc-400">Last 60 Events</span>
+              <span className="text-micro font-data text-fg-muted">Last 60 Events</span>
             </div>
 
             {checkpointAnalytics.recent_activity.length === 0 ? (
-              <div className="text-center py-6 text-zinc-500 text-xs font-mono">
+              <div className="text-center py-6 text-fg-subtle text-caption font-data">
                 No checkpoint user activity logged yet. Activity appears as soon as claimants visit the claim link.
               </div>
             ) : (
               <div className="overflow-x-auto max-h-72 overflow-y-auto">
-                <table className="w-full text-left text-xs font-mono">
-                  <thead className="sticky top-0 bg-[#12141e] border-b border-gray-800 text-zinc-400 text-[11px]">
-                    <tr>
-                      <th className="py-2 px-3">Timestamp</th>
-                      <th className="py-2 px-3">Claimant IP</th>
-                      <th className="py-2 px-3">Event / Checkpoint Action</th>
-                      <th className="py-2 px-3">Stage</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800/40">
+                <Table bare containerClassName="overflow-visible">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Timestamp</TableHead>
+                      <TableHead>Claimant IP</TableHead>
+                      <TableHead>Event / Checkpoint Action</TableHead>
+                      <TableHead>Stage</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {checkpointAnalytics.recent_activity.map((item) => (
-                      <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-2 px-3 text-zinc-400 whitespace-nowrap">
+                      <TableRow key={item.id}>
+                        <TableCell mono className="text-fg-muted">
                           {new Date(item.created_at).toLocaleTimeString()} • {new Date(item.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="py-2 px-3 text-white font-bold">{item.ip_address}</td>
-                        <td className="py-2 px-3 text-zinc-200">{item.description}</td>
-                        <td className="py-2 px-3">
+                        </TableCell>
+                        <TableCell mono className="text-fg font-bold">{item.ip_address}</TableCell>
+                        <TableCell mono className="text-fg">{item.description}</TableCell>
+                        <TableCell mono>
                           {item.stage === "completed" ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                            <span className="px-2 py-0.5 rounded text-micro font-bold bg-success/10 text-success-text border border-success/30">
                               COMPLETED FULLY
                             </span>
                           ) : item.stage === "step_completed" ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                            <span className="px-2 py-0.5 rounded text-micro font-bold bg-accent/10 text-accent-text border border-accent/30">
                               STEP COMPLETED
                             </span>
                           ) : item.stage === "step_started" ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-300 border border-blue-500/30">
+                            <span className="px-2 py-0.5 rounded text-micro font-bold bg-accent/10 text-accent-text border border-accent/30">
                               STEP STARTED
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">
+                            <span className="px-2 py-0.5 rounded text-micro font-bold bg-surface-hover text-fg border border-line-strong">
                               VISITED PORTAL
                             </span>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </div>
@@ -1715,19 +1686,19 @@ export default function CheckpointsPage() {
           {/* ========================================================================= */}
           <div className="space-y-5 pt-2">
             {/* Banner */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-gradient-to-r from-rose-950/40 via-[#12141e] to-rose-950/20 border border-rose-500/30">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border border-danger/30">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-danger/10 border border-danger/30 flex items-center justify-center text-danger-text shrink-0">
                   <ShieldAlert className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2 font-mono">
+                  <h3 className="text-body-sm font-bold text-fg flex items-center gap-2 font-data">
                     <span>Anti-Bypass Telemetry & Auto-Lockout Engine</span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                    <span className="px-2 py-0.5 rounded text-micro font-data bg-danger/20 text-danger-text border border-danger/30">
                       3-Strike Rule Active
                     </span>
                   </h3>
-                  <p className="text-xs text-zinc-400 mt-0.5">
+                  <p className="text-caption text-fg-muted mt-0.5">
                     Monitors real-time checkpoint dwell time anomalies, bot skips, and token tampering. Users exceeding 3 bypass attempts are automatically and permanently locked out from key claims across their IP and HWID.
                   </p>
                 </div>
@@ -1737,7 +1708,7 @@ export default function CheckpointsPage() {
                   <button
                     type="button"
                     onClick={handleClearBypassLogs}
-                    className="px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/40 text-xs font-semibold text-rose-300 hover:text-rose-100 flex items-center gap-1.5 transition-all"
+                    className="px-3 py-1.5 rounded-lg bg-danger/10 hover:bg-danger/10 border border-danger/40 text-caption font-semibold text-danger-text hover:text-danger-text flex items-center gap-1.5 transition-all"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Clear Bypass Logs</span>
@@ -1748,164 +1719,164 @@ export default function CheckpointsPage() {
 
             {/* Shield Metric Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 rounded-xl bg-[#12141e] border border-gray-800 shadow-lg">
-                <div className="flex items-center justify-between text-zinc-400 text-xs mb-1 font-mono">
+              <div className="p-4 rounded-lg bg-surface-raised border border-line">
+                <div className="flex items-center justify-between text-fg-muted text-caption mb-1 font-data">
                   <span>Bypass Attempts Caught</span>
-                  <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  <ShieldAlert className="w-4 h-4 text-danger-text" />
                 </div>
-                <div className="text-2xl font-bold text-white font-mono">
+                <div className="text-2xl font-bold text-fg font-data">
                   {bypassSummary.total_attempts}
                 </div>
-                <p className="text-[11px] text-zinc-500 mt-1">Real-time checkpoint anomalies blocked</p>
+                <p className="text-micro text-fg-subtle mt-1">Real-time checkpoint anomalies blocked</p>
               </div>
 
-              <div className="p-4 rounded-xl bg-[#12141e] border border-gray-800 shadow-lg">
-                <div className="flex items-center justify-between text-zinc-400 text-xs mb-1 font-mono">
+              <div className="p-4 rounded-lg bg-surface-raised border border-line">
+                <div className="flex items-center justify-between text-fg-muted text-caption mb-1 font-data">
                   <span>Permanently Locked Users</span>
-                  <Skull className="w-4 h-4 text-rose-400" />
+                  <Skull className="w-4 h-4 text-danger-text" />
                 </div>
-                <div className="text-2xl font-bold text-rose-400 font-mono">
+                <div className="text-2xl font-bold text-danger-text font-data">
                   {bypassSummary.total_locked_ips + bypassSummary.total_locked_hwids}
                 </div>
-                <p className="text-[11px] text-zinc-500 mt-1">
+                <p className="text-micro text-fg-subtle mt-1">
                   {bypassSummary.total_locked_ips} IPs • {bypassSummary.total_locked_hwids} HWIDs
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-[#12141e] border border-gray-800 shadow-lg">
-                <div className="flex items-center justify-between text-zinc-400 text-xs mb-1 font-mono">
+              <div className="p-4 rounded-lg bg-surface-raised border border-line">
+                <div className="flex items-center justify-between text-fg-muted text-caption mb-1 font-data">
                   <span>Auto-Lockout Threshold</span>
-                  <Zap className="w-4 h-4 text-amber-400" />
+                  <Zap className="w-4 h-4 text-warning-text" />
                 </div>
-                <div className="text-2xl font-bold text-amber-400 font-mono">
+                <div className="text-2xl font-bold text-warning-text font-data">
                   3 Attempts
                 </div>
-                <p className="text-[11px] text-zinc-500 mt-1">Triggers immediate IP & HWID ban</p>
+                <p className="text-micro text-fg-subtle mt-1">Triggers immediate IP & HWID ban</p>
               </div>
             </div>
 
             {/* Permanent Lockouts Table (IPs & HWIDs) */}
-            <div className="bg-[#12141e] border border-gray-800 rounded-xl p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+            <div className="bg-surface-raised border border-line rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-line pb-3">
                 <div className="flex items-center gap-2">
-                  <Skull className="w-4 h-4 text-rose-400" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono">
+                  <Skull className="w-4 h-4 text-danger-text" />
+                  <h3 className="text-caption font-bold text-fg font-data">
                     Active Lockouts (Blacklisted from Key Claim)
                   </h3>
                 </div>
-                <span className="text-[11px] font-mono text-zinc-400">
+                <span className="text-micro font-data text-fg-muted">
                   {lockedIps.length + lockedHwids.length} Locked
                 </span>
               </div>
 
               {lockedIps.length === 0 && lockedHwids.length === 0 ? (
-                <div className="text-center py-6 text-zinc-500 text-xs font-mono">
+                <div className="text-center py-6 text-fg-subtle text-caption font-data">
                   ✓ No active lockouts. All legitimate claimants are clear.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-mono">
-                    <thead>
-                      <tr className="border-b border-gray-800/80 text-zinc-400 text-[11px]">
-                        <th className="py-2.5 px-3">Type</th>
-                        <th className="py-2.5 px-3">Identifier (IP / HWID)</th>
-                        <th className="py-2.5 px-3">Lockout Reason</th>
-                        <th className="py-2.5 px-3">Date Locked</th>
-                        <th className="py-2.5 px-3 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-800/40">
+                  <Table bare containerClassName="overflow-visible">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Identifier (IP / HWID)</TableHead>
+                        <TableHead>Lockout Reason</TableHead>
+                        <TableHead>Date Locked</TableHead>
+                        <TableHead align="right">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {lockedIps.map((item) => (
-                        <tr key={item.ip} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="py-2.5 px-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold">
+                        <TableRow key={item.ip}>
+                          <TableCell mono>
+                            <span className="px-2 py-0.5 rounded text-micro bg-accent/10 text-accent-text border border-accent/20 font-bold">
                               IP LOCK
                             </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-white font-bold">{item.ip}</td>
-                          <td className="py-2.5 px-3 text-zinc-300 max-w-xs truncate">{item.reason}</td>
-                          <td className="py-2.5 px-3 text-zinc-400">{new Date(item.banned_at).toLocaleString()}</td>
-                          <td className="py-2.5 px-3 text-right">
+                          </TableCell>
+                          <TableCell mono className="text-fg font-bold">{item.ip}</TableCell>
+                          <TableCell mono className="text-fg max-w-xs truncate">{item.reason}</TableCell>
+                          <TableCell mono className="text-fg-muted">{new Date(item.banned_at).toLocaleString()}</TableCell>
+                          <TableCell align="right" mono>
                             <button
                               type="button"
                               onClick={() => handleUnlockIp(item.ip)}
-                              className="px-2.5 py-1 rounded bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold transition-all inline-flex items-center gap-1"
+                              className="px-2.5 py-1 rounded bg-success/10 hover:bg-success/10 border border-success/30 text-success-text text-micro font-semibold transition-all inline-flex items-center gap-1"
                             >
                               <Unlock className="w-3 h-3" />
                               <span>Unlock IP</span>
                             </button>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
                       {lockedHwids.map((item) => (
-                        <tr key={item.hwid} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="py-2.5 px-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold">
+                        <TableRow key={item.hwid}>
+                          <TableCell mono>
+                            <span className="px-2 py-0.5 rounded text-micro bg-accent/10 text-accent-text border border-accent/20 font-bold">
                               HWID LOCK
                             </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-white font-bold truncate max-w-xs">{item.hwid}</td>
-                          <td className="py-2.5 px-3 text-zinc-300 max-w-xs truncate">{item.reason}</td>
-                          <td className="py-2.5 px-3 text-zinc-400">{new Date(item.banned_at).toLocaleString()}</td>
-                          <td className="py-2.5 px-3 text-right">
+                          </TableCell>
+                          <TableCell mono className="text-fg font-bold truncate max-w-xs">{item.hwid}</TableCell>
+                          <TableCell mono className="text-fg max-w-xs truncate">{item.reason}</TableCell>
+                          <TableCell mono className="text-fg-muted">{new Date(item.banned_at).toLocaleString()}</TableCell>
+                          <TableCell align="right" mono>
                             <button
                               type="button"
                               onClick={() => handleUnlockHwid(item.hwid)}
-                              className="px-2.5 py-1 rounded bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold transition-all inline-flex items-center gap-1"
+                              className="px-2.5 py-1 rounded bg-success/10 hover:bg-success/10 border border-success/30 text-success-text text-micro font-semibold transition-all inline-flex items-center gap-1"
                             >
                               <Unlock className="w-3 h-3" />
                               <span>Unlock HWID</span>
                             </button>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </div>
 
             {/* Real-time Bypass Attempts Feed */}
-            <div className="bg-[#12141e] border border-gray-800 rounded-xl p-5 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-3">
+            <div className="bg-surface-raised border border-line rounded-lg p-4 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-3">
                 <div className="flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-amber-400" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-white font-mono">
+                  <ShieldAlert className="w-4 h-4 text-warning-text" />
+                  <h3 className="text-caption font-bold text-fg font-data">
                     Live Bypass Attempts Feed ({bypassAttempts.length})
                   </h3>
                 </div>
                 <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+                  <Search className="w-3.5 h-3.5 text-fg-subtle absolute left-3 top-2.5" />
                   <input
                     type="text"
                     value={bypassSearch}
                     onChange={(e) => setBypassSearch(e.target.value)}
                     placeholder="Filter by IP, HWID, reason..."
-                    className="bg-[#0e1017] border border-gray-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 font-mono outline-none focus:border-zinc-500 w-64"
+                    className="bg-surface border border-line rounded-lg pl-8 pr-3 py-1.5 text-caption text-fg placeholder:text-fg-subtle font-data outline-none focus:border-line-strong w-64"
                   />
                 </div>
               </div>
 
               {bypassAttempts.length === 0 ? (
-                <div className="text-center py-10 text-zinc-500 text-xs font-mono">
-                  <ShieldCheck className="w-8 h-8 mx-auto mb-2 text-emerald-500/50" />
+                <div className="text-center py-10 text-fg-subtle text-caption font-data">
+                  <ShieldCheck className="w-8 h-8 mx-auto mb-2 text-success-text" />
                   <p>No bypass attempts detected yet.</p>
-                  <p className="text-[11px] text-zinc-600 mt-1">Whenever a user or bot attempts skipping checkpoints, it will automatically record and alert here.</p>
+                  <p className="text-micro text-fg-disabled mt-1">Whenever a user or bot attempts skipping checkpoints, it will automatically record and alert here.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-mono">
-                    <thead>
-                      <tr className="border-b border-gray-800/80 text-zinc-400 text-[11px]">
-                        <th className="py-2.5 px-3">Timestamp</th>
-                        <th className="py-2.5 px-3">IP Address</th>
-                        <th className="py-2.5 px-3">HWID</th>
-                        <th className="py-2.5 px-3">Violation Reason</th>
-                        <th className="py-2.5 px-3">Attempt Status</th>
-                        <th className="py-2.5 px-3 text-right">Quick Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-800/40">
+                  <Table bare containerClassName="overflow-visible">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Timestamp</TableHead>
+                        <TableHead>IP Address</TableHead>
+                        <TableHead>HWID</TableHead>
+                        <TableHead>Violation Reason</TableHead>
+                        <TableHead>Attempt Status</TableHead>
+                        <TableHead align="right">Quick Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {bypassAttempts
                         .filter((a) => {
                           if (!bypassSearch.trim()) return true;
@@ -1921,57 +1892,57 @@ export default function CheckpointsPage() {
                           const isHwidBanned = Boolean(attempt.hwid && lockedHwids.some((l) => l.hwid === attempt.hwid));
 
                           return (
-                            <tr key={attempt.id} className="hover:bg-white/[0.02] transition-colors">
-                              <td className="py-2.5 px-3 text-zinc-400 whitespace-nowrap">
+                            <TableRow key={attempt.id}>
+                              <TableCell mono className="text-fg-muted">
                                 {new Date(attempt.created_at).toLocaleTimeString()} • {new Date(attempt.created_at).toLocaleDateString()}
-                              </td>
-                              <td className="py-2.5 px-3 font-bold text-white">
+                              </TableCell>
+                              <TableCell mono className="font-bold text-fg">
                                 <span className="flex items-center gap-1.5">
                                   <span>{attempt.ip_address}</span>
                                   {isIpBanned && (
-                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                    <span className="text-micro font-bold px-1.5 py-0.2 rounded bg-danger/20 text-danger-text border border-danger/30">
                                       BANNED
                                     </span>
                                   )}
                                 </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-zinc-300 max-w-xs truncate">
+                              </TableCell>
+                              <TableCell mono className="text-fg max-w-xs truncate">
                                 {attempt.hwid ? (
                                   <span className="flex items-center gap-1.5">
                                     <span>{attempt.hwid.slice(0, 16)}...</span>
                                     {isHwidBanned && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                      <span className="text-micro font-bold px-1.5 py-0.2 rounded bg-danger/20 text-danger-text border border-danger/30">
                                         BANNED
                                       </span>
                                     )}
                                   </span>
                                 ) : (
-                                  <span className="text-zinc-600">—</span>
+                                  <span className="text-fg-disabled">—</span>
                                 )}
-                              </td>
-                              <td className="py-2.5 px-3 text-rose-300 max-w-sm leading-snug">
+                              </TableCell>
+                              <TableCell mono className="text-danger-text max-w-sm leading-snug">
                                 {attempt.reason}
-                              </td>
-                              <td className="py-2.5 px-3">
+                              </TableCell>
+                              <TableCell mono>
                                 {isIpBanned || isHwidBanned ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950/60 text-rose-300 border border-rose-500/40">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-micro font-bold bg-danger/10 text-danger-text border border-danger/40">
                                     <Skull className="w-3 h-3" />
                                     <span>LOCKED OUT</span>
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/60 text-amber-300 border border-amber-500/40">
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-micro font-bold bg-warning/10 text-warning-text border border-warning/40">
                                     <AlertCircle className="w-3 h-3" />
                                     <span>Bypass Recorded</span>
                                   </span>
                                 )}
-                              </td>
-                              <td className="py-2.5 px-3 text-right">
+                              </TableCell>
+                              <TableCell align="right" mono>
                                 <div className="inline-flex items-center gap-1.5">
                                   {!isIpBanned && (
                                     <button
                                       type="button"
                                       onClick={() => handleLockoutIp(attempt.ip_address)}
-                                      className="px-2 py-1 rounded bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 text-[10px] font-semibold transition-all flex items-center gap-1"
+                                      className="px-2 py-1 rounded bg-danger/10 hover:bg-danger/10 border border-danger/30 text-danger-text text-micro font-semibold transition-all flex items-center gap-1"
                                       title="Manually Lock Out IP"
                                     >
                                       <Ban className="w-2.5 h-2.5" />
@@ -1982,7 +1953,7 @@ export default function CheckpointsPage() {
                                     <button
                                       type="button"
                                       onClick={() => handleLockoutHwid(attempt.hwid!)}
-                                      className="px-2 py-1 rounded bg-purple-950/40 hover:bg-purple-900/60 border border-purple-500/30 text-purple-300 text-[10px] font-semibold transition-all flex items-center gap-1"
+                                      className="px-2 py-1 rounded bg-accent/10 hover:bg-accent/10 border border-accent/30 text-accent-text text-micro font-semibold transition-all flex items-center gap-1"
                                       title="Manually Lock Out HWID"
                                     >
                                       <Ban className="w-2.5 h-2.5" />
@@ -1990,12 +1961,12 @@ export default function CheckpointsPage() {
                                     </button>
                                   )}
                                 </div>
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           );
                         })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </div>

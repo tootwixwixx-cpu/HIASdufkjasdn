@@ -1,8 +1,12 @@
-// middleware.ts
+// proxy.ts (Next.js 16 renamed this from middleware.ts; function renamed middleware -> proxy)
+// NOTE: per Next.js guidance (and CVE-2025-29927, the historical middleware-auth-bypass
+// vulnerability), this proxy layer is NOT the sole authorization boundary. Every
+// sensitive API route should also call isAuthenticated() itself (most already do) so a
+// future proxy/runtime bug can't become a full auth bypass on its own.
 import { NextRequest, NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME, isValidSessionToken } from "@/lib/auth";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Handle CORS preflight options
