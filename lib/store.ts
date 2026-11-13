@@ -864,34 +864,51 @@ export const dbService = {
   async saveProtectedPayload(slug: string, payload: string, stats?: any): Promise<void> {
     if (!slug || !payload) return;
     const clean = slug.trim().toLowerCase();
-    if (!fs.existsSync(PROTECTED_DIR)) {
-      fs.mkdirSync(PROTECTED_DIR, { recursive: true });
-    }
-    const filePath = protectedPayloadPath(clean);
-    if (!filePath) {
-      console.error(`Refusing to save protected payload: slug "${slug}" resolves outside PROTECTED_DIR`);
-      return;
-    }
-    fs.writeFileSync(filePath, payload, "utf8");
 
-    const db = readLocalDb();
-    const script = db.scripts.find((s) => s.slug.toLowerCase() === clean);
-    if (script) {
-      script.is_obfuscated = true;
-      script.obfuscated_at = new Date().toISOString();
-      script.obfuscation_stats = stats || null;
-      script.obfuscated_payload = payload;
-      writeLocalDb(db);
+    // BUGFIX: this block used to run unguarded (no try/catch), unlike every other local-FS
+    // write in this file. On a read-only deployment filesystem (e.g. Vercel's Linux
+    // runtime -- /var/task is read-only except /tmp), fs.mkdirSync throws ENOENT/EROFS,
+    // which was uncaught and crashed the whole request. The local disk cache is a
+    // best-effort dev-machine convenience, not the durable store -- Supabase (below) is --
+    // so a failure here must never block anything.
+    try {
+      if (!fs.existsSync(PROTECTED_DIR)) {
+        fs.mkdirSync(PROTECTED_DIR, { recursive: true });
+      }
+      const filePath = protectedPayloadPath(clean);
+      if (!filePath) {
+        console.error(`Refusing to save protected payload to disk: slug "${slug}" resolves outside PROTECTED_DIR`);
+      } else {
+        fs.writeFileSync(filePath, payload, "utf8");
+      }
+
+      const db = readLocalDb();
+      const localScript = db.scripts.find((s) => s.slug.toLowerCase() === clean);
+      if (localScript) {
+        localScript.is_obfuscated = true;
+        localScript.obfuscated_at = new Date().toISOString();
+        localScript.obfuscation_stats = stats || null;
+        localScript.obfuscated_payload = payload;
+        writeLocalDb(db);
+      }
+    } catch (err) {
+      console.error(`saveProtectedPayload: local disk cache unavailable for "${slug}" (expected on a read-only deployment filesystem):`, err);
     }
 
-    if (isSupabaseConfigured && supabase && script) {
+    // BUGFIX: this used to be gated on `script` found above in the LOCAL json db, which
+    // is always empty/fallback on a deployment with no writable filesystem -- meaning the
+    // Supabase write (the actually-durable one) would silently never run there even with
+    // Supabase fully configured. Update by slug directly (unique in the schema) instead of
+    // requiring a local-db lookup to have already succeeded.
+    if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from("scripts").update({
+        const { error } = await supabase.from("scripts").update({
           is_obfuscated: true,
           obfuscated_at: new Date().toISOString(),
           obfuscation_stats: stats || null,
           obfuscated_payload: payload,
-        }).eq("id", script.id);
+        }).eq("slug", clean);
+        if (error) console.warn("Supabase update protected payload failed:", error);
       } catch (err) {
         console.warn("Supabase update protected payload fallback:", err);
       }
