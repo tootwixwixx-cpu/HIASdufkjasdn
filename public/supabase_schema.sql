@@ -160,6 +160,25 @@ BEFORE UPDATE ON public.scripts
 FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
 -- ============================================================================
+-- 6b. Auth Pre-Flight Probe Tokens (single-use gateway tokens, lib/store.ts
+--     createProbeToken/verifyAndConsumeProbeToken -- has an in-memory fallback so it's
+--     not fatal if missing, but without it single-use/expiry guarantees only hold
+--     per-instance, not across a multi-instance deployment)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.auth_probe_tokens (
+    token TEXT PRIMARY KEY,
+    script_slug TEXT NOT NULL,
+    ip_address TEXT NOT NULL,
+    hwid TEXT DEFAULT NULL,
+    challenge_seed TEXT NOT NULL,
+    is_used BOOLEAN NOT NULL DEFAULT false,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+CREATE INDEX IF NOT EXISTS idx_auth_probe_tokens_slug ON public.auth_probe_tokens(script_slug);
+CREATE INDEX IF NOT EXISTS idx_auth_probe_tokens_expires ON public.auth_probe_tokens(expires_at);
+
+-- ============================================================================
 -- 7. License Keys Pool (Staff Keys, HWID/IP Locks, Durations)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.keys (
