@@ -464,41 +464,46 @@ export default function ModularScriptUploader({ loaderConfigs, onScriptCreated }
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
-          className="border border-dashed border-line-strong hover:border-accent/60 rounded-lg p-4 flex flex-col items-center justify-center text-center bg-surface transition-all cursor-pointer group"
-          onClick={() => folderInputRef.current?.click()}
+          className="border border-dashed border-line-strong hover:border-accent/60 rounded-lg p-5 flex flex-col items-center justify-center text-center bg-surface transition-all"
         >
-          <div className="w-14 h-14 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent-text mb-3 group-hover:scale-105 group-hover:bg-accent/20 transition-all">
+          <div className="w-14 h-14 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent-text mb-3">
             <UploadCloud className="w-7 h-7" />
           </div>
           <p className="text-body-sm font-semibold text-fg">
-            Drag & drop your script folder or ZIP archive here
+            Drag & drop files, or pick how you want to add this script
           </p>
           <p className="text-caption text-fg-muted mt-1">
-            Supports multi-file projects, nested sub-modules, and packages
+            A single .lua/.luau file, several files at once, a whole folder of modules, or a ZIP
           </p>
 
-          <div className="flex items-center gap-2 mt-4">
+          {/* BUGFIX: the whole box used to have its own onClick that silently opened the
+              FOLDER picker no matter where you clicked, so clicking anywhere except the
+              exact pixels of the small "Select Files / Zip" button below it always gave
+              you a folder-only OS dialog -- which is exactly the "I only ever get a
+              folder picker" symptom. Removed that ambiguous whole-box default; now only
+              these two explicitly-labeled, equally-sized buttons open anything. */}
+          <div className="flex items-center gap-3 mt-4">
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                folderInputRef.current?.click();
-              }}
-              className="px-3 py-1.5 rounded-lg bg-surface-hover hover:bg-surface-active text-caption font-medium text-fg border border-line-strong"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-caption font-semibold transition-all"
             >
-              Select Folder
+              <FileCode className="w-4 h-4" />
+              Choose file(s) or ZIP
             </button>
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                fileInputRef.current?.click();
-              }}
-              className="px-3 py-1.5 rounded-lg bg-surface-hover hover:bg-surface-active text-caption font-medium text-fg border border-line-strong"
+              onClick={() => folderInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface-hover hover:bg-surface-active text-caption font-medium text-fg border border-line-strong transition-all"
             >
-              Select Files / Zip
+              <UploadCloud className="w-4 h-4" />
+              Choose a folder
             </button>
           </div>
+          <p className="text-micro text-fg-subtle mt-2.5">
+            "Choose file(s)" lets you pick exactly one script if that's all you need --
+            it's not folder-only.
+          </p>
 
           {/* Hidden inputs */}
           <input
@@ -515,7 +520,7 @@ export default function ModularScriptUploader({ loaderConfigs, onScriptCreated }
             type="file"
             ref={fileInputRef}
             multiple
-            accept=".lua,.luau,.zip"
+            accept=".lua,.luau,.zip,.txt"
             className="hidden"
             onChange={(e) => e.target.files && handleFilesList(e.target.files)}
           />

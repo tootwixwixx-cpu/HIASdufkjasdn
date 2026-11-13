@@ -14,10 +14,15 @@ const LUAU_COMPILE = path.join(BIN_DIR, 'luau-compile.exe');
 const LUAU_EXE = path.join(BIN_DIR, 'luau.exe');
 const LUAU_AST = path.join(BIN_DIR, 'luau-ast.exe');
 
+// BUGFIX (ported from the in-app lib/obfuscator/compiler.js fix): these are Windows PE
+// binaries, so report them unavailable on any other platform rather than just checking
+// fs.existsSync() -- the file existing isn't the same as it being executable here.
+const IS_WINDOWS = process.platform === 'win32';
+
 function getCompilerStatus() {
   return {
-    luauCompile: fs.existsSync(LUAU_COMPILE),
-    luau: fs.existsSync(LUAU_EXE),
+    luauCompile: IS_WINDOWS && fs.existsSync(LUAU_COMPILE),
+    luau: IS_WINDOWS && fs.existsSync(LUAU_EXE),
   };
 }
 

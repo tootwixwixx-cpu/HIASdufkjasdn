@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import JSZip from "jszip";
 import {
   X,
   FileCode,
@@ -22,6 +23,7 @@ import {
   FolderGit2,
   Shield,
   Cpu,
+  FolderPlus,
 } from "lucide-react";
 import { ScriptRecord } from "@/lib/store";
 import { Modal, Button, Badge, Tabs, TabsList, TabsTrigger } from "@/components/ui";
@@ -65,6 +67,9 @@ export default function ScriptUpdateModal({
   const [copiedLoadstring, setCopiedLoadstring] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
+  const bulkFolderInputRef = useRef<HTMLInputElement>(null);
+  const [bulkAddMsg, setBulkAddMsg] = useState<string | null>(null);
 
   // Initialize when script changes or modal opens
   useEffect(() => {
@@ -89,6 +94,7 @@ export default function ScriptUpdateModal({
       setError(null);
       setIsAddingFile(false);
       setNewFileNameInput("");
+      setBulkAddMsg(null);
     }
   }, [script, isOpen]);
 
@@ -138,6 +144,47 @@ export default function ScriptUpdateModal({
     }
 
     if (e.target) e.target.value = "";
+  };
+
+  // Add one or more new modules at once (multi-file select, a whole folder, or a zip)
+  // -- merges into the existing modulesMap rather than replacing anything, so this is
+  // additive: existing files are left alone unless a new file happens to share a name.
+  const handleBulkAddFiles = async (files: FileList | File[]) => {
+    setError(null);
+    const additions: Record<string, string> = {};
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const relPath = (file as unknown as { webkitRelativePath?: string }).webkitRelativePath || file.name;
+
+      if (file.name.endsWith(".zip")) {
+        try {
+          const zip = await JSZip.loadAsync(file);
+          for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+            if (!zipEntry.dir && (relativePath.endsWith(".lua") || relativePath.endsWith(".luau") || relativePath.endsWith(".txt"))) {
+              additions[relativePath] = await zipEntry.async("string");
+            }
+          }
+        } catch {
+          setError("Failed to extract zip file. Please make sure it is a valid zip archive.");
+        }
+      } else if (file.name.endsWith(".lua") || file.name.endsWith(".luau") || file.name.endsWith(".txt")) {
+        additions[relPath] = await file.text();
+      }
+    }
+
+    const addedKeys = Object.keys(additions);
+    if (addedKeys.length === 0) {
+      setError("No .lua, .luau, or .txt files were found in what you selected.");
+      return;
+    }
+
+    setModulesMap((prev) => ({ ...prev, ...additions }));
+    setSelectedFile(addedKeys[0]);
+    setBulkAddMsg(
+      `Added ${addedKeys.length} module${addedKeys.length === 1 ? "" : "s"}. Review below, then click "Save & deploy update".`
+    );
+    setSaveSuccess(null);
   };
 
   // Paste from clipboard
@@ -592,6 +639,62 @@ export default function ScriptUpdateModal({
                     </button>
                   </div>
                 )}
+
+                {/* Bulk-add new modules (multi-file, a whole folder, or a zip) -- additive,
+                    doesn't touch the currently-selected file above. */}
+                <div className="pt-1 border-t border-line">
+                  <p className="text-micro font-semibold text-fg-muted pt-3 pb-2">
+                    Or add several new modules at once:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => bulkFileInputRef.current?.click()}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-hover hover:bg-surface-active text-caption font-medium text-fg border border-line-strong transition-colors"
+                    >
+                      <FileCode className="w-3.5 h-3.5 text-accent-text" />
+                      Add file(s) / zip
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => bulkFolderInputRef.current?.click()}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-hover hover:bg-surface-active text-caption font-medium text-fg border border-line-strong transition-colors"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5 text-accent-text" />
+                      Add a folder
+                    </button>
+                  </div>
+                  <input
+                    ref={bulkFileInputRef}
+                    type="file"
+                    multiple
+                    accept=".lua,.luau,.txt,.zip"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) handleBulkAddFiles(e.target.files);
+                      if (e.target) e.target.value = "";
+                    }}
+                  />
+                  <input
+                    ref={bulkFolderInputRef}
+                    type="file"
+                    /* @ts-expect-error webkitdirectory is non-standard but supported */
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) handleBulkAddFiles(e.target.files);
+                      if (e.target) e.target.value = "";
+                    }}
+                  />
+                  {bulkAddMsg && (
+                    <div className="mt-2.5 p-2.5 rounded-lg bg-accent/10 border border-accent/30 text-accent-text text-caption flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>{bulkAddMsg}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

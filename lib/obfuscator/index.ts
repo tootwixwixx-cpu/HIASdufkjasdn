@@ -70,6 +70,15 @@ export function bundleModules(input: BundleInput): string {
  * Verifies that Luau code compiles cleanly without any syntax or bytecode errors.
  */
 export function verifyLuauBytecode(luaCode: string): { ok: boolean; error?: string } {
+  // BUGFIX: these are Windows PE binaries. On a non-Windows deployment (e.g. Vercel's
+  // Linux runtime) the file genuinely exists in the bundle but can't execute --
+  // execFileSync would throw "cannot execute binary file", which used to get caught
+  // below and reported as a verification FAILURE, blocking every script save there.
+  // Skip straight to the "binary unavailable" fallback (ok: true, nothing to verify
+  // against) on any platform where it couldn't possibly run.
+  if (process.platform !== 'win32') {
+    return { ok: true };
+  }
   const candidates = [
     path.join(__dirname, 'bin', 'luau-compile.exe'),
     path.join(process.cwd(), 'lib', 'obfuscator', 'bin', 'luau-compile.exe'),
