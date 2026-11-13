@@ -41,14 +41,24 @@ function wrapPolymorphic(source) {
   // Chunk the escaped payload into bounded-size string literals instead of one unbounded token: a
   // single multi-hundred-KB `\DDD`-escaped literal is itself a 4x size blowup over the raw bytes AND
   // risks hitting engine/executor literal-size limits on large scripts. ~2000 \DDD tokens (~8KB of
-  // source text) per chunk, concatenated with `..` — identical runtime value, no single giant token.
+  // source text) per chunk.
+  // BUGFIX: joining the chunks with Lua's `..` operator seemed right but isn't -- a `..` chain of N
+  // operands compiles to a single OP_CONCAT instruction that needs every operand in a CONTIGUOUS
+  // register range simultaneously, so ~250+ chunks (i.e. any script around BloxStrikeSuite.lua's real
+  // size, ~500KB) hits Luau's 255-register-per-function ceiling just as hard as the one-giant-literal
+  // version did (confirmed live: "Out of registers when trying to allocate 250 registers"). table.concat()
+  // on a table LITERAL sidesteps this: it's one ordinary function call taking a table argument, and
+  // Luau's compiler batches table-constructor fields in flushes rather than needing them all live at
+  // once, so this scales to arbitrarily many chunks.
   const CHUNK_TOKENS = 2000;
   const chunks = [];
   for (let i = 0; i < encoded.length; i += CHUNK_TOKENS) {
     chunks.push(encoded.slice(i, i + CHUNK_TOKENS).join(''));
   }
   if (chunks.length === 0) chunks.push('');
-  const bufLiteral = chunks.map(c => `"${c}"`).join(' .. ');
+  const bufLiteral = chunks.length === 1
+    ? `"${chunks[0]}"`
+    : `table.concat({ ${chunks.map(c => `"${c}"`).join(', ')} })`;
 
   const idKeys  = randomId('_k');
   const idBuf   = randomId('_b');

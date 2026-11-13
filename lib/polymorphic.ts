@@ -50,9 +50,31 @@ export function wrapPolymorphicLuau(rawCode: string): string {
     const keyByte = keys[i % keys.length];
     const shift = (keyByte + (i + 1) * step) & 255;
     const encByte = origByte ^ shift;
-    encodedParts.push("\\" + encByte);
+    // Always 3 digits (\000-\255) so a following digit can never be misread as part of
+    // this escape -- matches the sibling implementation's fix in lib/obfuscator/polymorphic.js.
+    encodedParts.push("\\" + String(encByte).padStart(3, "0"));
   }
-  const encodedString = encodedParts.join("");
+
+  // BUGFIX: this used to join every part into ONE unbounded string literal. For a script
+  // large enough (confirmed live on a real deployment with the ~500KB BloxStrikeSuite.lua),
+  // that single multi-MB `\DDD`-escaped literal produces output that fails to even
+  // compile ("Out of registers when trying to allocate 250 registers: exceeded limit 255").
+  // The first fix attempt here chunked it into `"..." .. "..." .. ...` -- but Luau's `..`
+  // operator chain compiles to a SINGLE OP_CONCAT instruction that needs every operand in a
+  // contiguous register range simultaneously, so a ~250-chunk `..` chain hits the exact same
+  // 255-register ceiling it was trying to avoid (confirmed: identical error, same number).
+  // table.concat() on a table LITERAL sidesteps this entirely -- it's an ordinary function
+  // call taking one table argument, not a register-hungry multi-operand VM instruction.
+  const CHUNK_TOKENS = 2000;
+  const encodedChunks: string[] = [];
+  for (let i = 0; i < encodedParts.length; i += CHUNK_TOKENS) {
+    encodedChunks.push(encodedParts.slice(i, i + CHUNK_TOKENS).join(""));
+  }
+  if (encodedChunks.length === 0) encodedChunks.push("");
+  const encodedBufLiteral =
+    encodedChunks.length === 1
+      ? `"${encodedChunks[0]}"`
+      : `table.concat({ ${encodedChunks.map((c) => `"${c}"`).join(", ")} })`;
 
   // Opaque predicate constants (always true/false but confusing to decompilers)
   const dummyConstant = Math.floor(Math.random() * 1000) + 100;
@@ -99,7 +121,7 @@ return (function()
 
     -- 2. Keystream Decoding State
     local ${idKeys} = { ${keys.join(", ")} }
-    local ${idBuf} = "${encodedString}"
+    local ${idBuf} = ${encodedBufLiteral}
     local ${idTbl} = _tbl.create(#${idBuf})
     local ${idXor} = (bit32 and bit32.bxor) or (bit and bit.bxor)
     local _step = ${step}
