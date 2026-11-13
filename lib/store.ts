@@ -448,7 +448,20 @@ const DB_BACKUP_FILE = path.join(DB_DIR, "db.json.bak");
 let inMemoryDbCache: LocalDatabase | null = null;
 const probeTokenCache = new Map<string, any>();
 
+// BUGFIX: on a deployment with a read-only filesystem (e.g. Vercel's Linux runtime --
+// /var/task is read-only outside /tmp), every single request used to retry the same
+// doomed fs.mkdirSync/writeFileSync and log a fresh "Error reading local db" line, for
+// the lifetime of the warm serverless instance. Functionally harmless (there's already
+// a graceful in-memory/Supabase fallback), but it's pure wasted syscalls plus log spam
+// that looks like a live crash on every request. Remember the result of the FIRST
+// attempt per warm instance and skip straight to the fallback after that, logging only
+// once instead of forever.
+let localFsKnownUnavailable = false;
+
 function readLocalDb(): LocalDatabase {
+  if (localFsKnownUnavailable) {
+    return inMemoryDbCache || initialDb;
+  }
   try {
     if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
     if (!fs.existsSync(DB_FILE)) {
@@ -480,7 +493,18 @@ function readLocalDb(): LocalDatabase {
     inMemoryDbCache = parsed;
     return parsed;
   } catch (err) {
-    console.error("Error reading local db, falling back to memory cache or backup", err);
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT" || code === "EROFS" || code === "EACCES") {
+      // A read-only/unwritable filesystem is an environment fact that won't change for
+      // the life of this process -- stop retrying it and log it exactly once.
+      localFsKnownUnavailable = true;
+      console.warn(
+        `[store] Local disk cache unavailable (${code}) -- this is expected on a read-only deployment filesystem. ` +
+          "Falling back to in-memory cache / Supabase for the rest of this instance's lifetime."
+      );
+    } else {
+      console.error("Error reading local db, falling back to memory cache or backup", err);
+    }
     if (inMemoryDbCache) {
       return inMemoryDbCache;
     }
@@ -499,9 +523,13 @@ function readLocalDb(): LocalDatabase {
 }
 
 function writeLocalDb(db: LocalDatabase) {
+  // Keep the in-memory cache current regardless of whether disk is writable -- this is
+  // what lets readLocalDb() above serve up-to-date data for the rest of this warm
+  // instance's lifetime even when the filesystem is read-only.
+  inMemoryDbCache = db;
+  if (localFsKnownUnavailable) return;
   try {
     if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
-    inMemoryDbCache = db;
     const tempFile = path.join(DB_DIR, `db.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`);
     const json = JSON.stringify(db, null, 2);
     fs.writeFileSync(tempFile, json, "utf8");
@@ -518,7 +546,13 @@ function writeLocalDb(db: LocalDatabase) {
       fs.copyFileSync(DB_FILE, DB_BACKUP_FILE);
     } catch {}
   } catch (err) {
-    console.error("Error writing local db", err);
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT" || code === "EROFS" || code === "EACCES") {
+      localFsKnownUnavailable = true;
+      console.warn(`[store] Local disk cache unavailable (${code}) for writes -- same as reads, expected on a read-only deployment filesystem.`);
+    } else {
+      console.error("Error writing local db", err);
+    }
   }
 }
 
@@ -871,28 +905,38 @@ export const dbService = {
     // which was uncaught and crashed the whole request. The local disk cache is a
     // best-effort dev-machine convenience, not the durable store -- Supabase (below) is --
     // so a failure here must never block anything.
-    try {
-      if (!fs.existsSync(PROTECTED_DIR)) {
-        fs.mkdirSync(PROTECTED_DIR, { recursive: true });
+    if (!localFsKnownUnavailable) {
+      try {
+        if (!fs.existsSync(PROTECTED_DIR)) {
+          fs.mkdirSync(PROTECTED_DIR, { recursive: true });
+        }
+        const filePath = protectedPayloadPath(clean);
+        if (!filePath) {
+          console.error(`Refusing to save protected payload to disk: slug "${slug}" resolves outside PROTECTED_DIR`);
+        } else {
+          fs.writeFileSync(filePath, payload, "utf8");
+        }
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException)?.code;
+        if (code === "ENOENT" || code === "EROFS" || code === "EACCES") {
+          localFsKnownUnavailable = true;
+          console.warn(`[store] saveProtectedPayload: local disk cache unavailable (${code}) -- expected on a read-only deployment filesystem.`);
+        } else {
+          console.error(`saveProtectedPayload: local disk cache error for "${slug}":`, err);
+        }
       }
-      const filePath = protectedPayloadPath(clean);
-      if (!filePath) {
-        console.error(`Refusing to save protected payload to disk: slug "${slug}" resolves outside PROTECTED_DIR`);
-      } else {
-        fs.writeFileSync(filePath, payload, "utf8");
-      }
+    }
 
-      const db = readLocalDb();
-      const localScript = db.scripts.find((s) => s.slug.toLowerCase() === clean);
-      if (localScript) {
-        localScript.is_obfuscated = true;
-        localScript.obfuscated_at = new Date().toISOString();
-        localScript.obfuscation_stats = stats || null;
-        localScript.obfuscated_payload = payload;
-        writeLocalDb(db);
-      }
-    } catch (err) {
-      console.error(`saveProtectedPayload: local disk cache unavailable for "${slug}" (expected on a read-only deployment filesystem):`, err);
+    // readLocalDb()/writeLocalDb() already short-circuit to the in-memory cache when
+    // localFsKnownUnavailable, so this stays correct (and cheap) either way.
+    const db = readLocalDb();
+    const localScript = db.scripts.find((s) => s.slug.toLowerCase() === clean);
+    if (localScript) {
+      localScript.is_obfuscated = true;
+      localScript.obfuscated_at = new Date().toISOString();
+      localScript.obfuscation_stats = stats || null;
+      localScript.obfuscated_payload = payload;
+      writeLocalDb(db);
     }
 
     // BUGFIX: this used to be gated on `script` found above in the LOCAL json db, which
