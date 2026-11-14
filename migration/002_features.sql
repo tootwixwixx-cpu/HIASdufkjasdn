@@ -101,6 +101,64 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------------
+-- Player session commands (kick / message / announcement / remote code)
+-- These used to be queued in each server instance's memory, so on Vercel an admin's kick or
+-- message usually never reached the player. Now they're appended atomically in the database.
+-- ---------------------------------------------------------------------------------
+create or replace function public.push_session_command(p_session_id uuid, p_command jsonb, p_kick boolean)
+returns boolean
+language sql
+security invoker
+set search_path = ''
+as $$
+  update public.sessions
+     set pending_commands = coalesce(pending_commands, '[]'::jsonb) || jsonb_build_array(p_command),
+         status = case when p_kick then 'kicked' else status end
+   where id = p_session_id
+  returning true;
+$$;
+
+-- Queues a command for every session that pinged within p_max_age_seconds (optionally one script).
+create or replace function public.push_command_to_active(p_command jsonb, p_script text, p_max_age_seconds integer, p_kick boolean)
+returns integer
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare n integer;
+begin
+  update public.sessions
+     set pending_commands = coalesce(pending_commands, '[]'::jsonb) || jsonb_build_array(p_command),
+         status = case when p_kick then 'kicked' else status end
+   where status = 'active'
+     and last_heartbeat >= now() - make_interval(secs => p_max_age_seconds)
+     and (p_script is null or p_script = 'all' or script_id = p_script);
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+-- Returns and clears a session's queued commands in one step (no command is delivered twice or lost).
+create or replace function public.take_session_commands(p_session_id uuid)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare v jsonb;
+begin
+  select pending_commands into v from public.sessions where id = p_session_id for update;
+  if not found then
+    return '[]'::jsonb;
+  end if;
+  if v is not null and jsonb_array_length(v) > 0 then
+    update public.sessions set pending_commands = '[]'::jsonb where id = p_session_id;
+  end if;
+  return coalesce(v, '[]'::jsonb);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------------
 -- Admin 2FA (Authy / any TOTP app). Secret is AES-256-GCM encrypted by the app.
 -- ---------------------------------------------------------------------------------
 create table if not exists public.admin_totp (

@@ -495,6 +495,14 @@ const probeTokenCache = new Map<string, any>();
 let localFsKnownUnavailable = false;
 
 function readLocalDb(): LocalDatabase {
+  // Supabase is the single source of truth whenever it's configured. The local JSON store is a
+  // per-instance copy on serverless (Vercel), which caused stale/duplicated state (deleted scripts
+  // reappearing, kicks never delivered, strikes counted per instance). Return a fresh copy of the
+  // built-in defaults every time instead: defaults keep working, nothing is ever remembered locally.
+  // The JSON file is only used for local development without a database.
+  if (isSupabaseConfigured) {
+    return structuredClone(initialDb);
+  }
   if (localFsKnownUnavailable) {
     return inMemoryDbCache || initialDb;
   }
@@ -559,6 +567,7 @@ function readLocalDb(): LocalDatabase {
 }
 
 function writeLocalDb(db: LocalDatabase) {
+  if (isSupabaseConfigured) return; // see readLocalDb: no local state when Supabase is configured
   // Keep the in-memory cache current regardless of whether disk is writable -- this is
   // what lets readLocalDb() above serve up-to-date data for the rest of this warm
   // instance's lifetime even when the filesystem is read-only.
@@ -1026,7 +1035,8 @@ export const dbService = {
   async getProtectedPayload(slugOrId: string): Promise<string | null> {
     if (!slugOrId) return null;
     const clean = slugOrId.trim().toLowerCase();
-    const filePath = protectedPayloadPath(clean);
+    // Disk cache only in local no-database mode (on Vercel it would serve an instance's stale build).
+    const filePath = isSupabaseConfigured ? null : protectedPayloadPath(clean);
     if (filePath && fs.existsSync(filePath)) {
       try {
         return fs.readFileSync(filePath, "utf8");
@@ -1051,7 +1061,7 @@ export const dbService = {
     // which was uncaught and crashed the whole request. The local disk cache is a
     // best-effort dev-machine convenience, not the durable store -- Supabase (below) is --
     // so a failure here must never block anything.
-    if (!localFsKnownUnavailable) {
+    if (!isSupabaseConfigured && !localFsKnownUnavailable) {
       try {
         if (!fs.existsSync(PROTECTED_DIR)) {
           fs.mkdirSync(PROTECTED_DIR, { recursive: true });
@@ -2104,6 +2114,24 @@ export const dbService = {
       longitude?: number | null;
     }
   ): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      // Always promote in the database. (The old code only did this when the session happened to be in
+      // this instance's memory, so on Vercel loader sessions mostly never became "active".)
+      const patch: Record<string, unknown> = {
+        key_id: updates.key_id,
+        script_id: updates.script_id,
+        status: updates.status,
+      };
+      if (updates.hwid !== undefined) patch.hwid = updates.hwid;
+      if (updates.tamper_flags) patch.tamper_flags = updates.tamper_flags;
+      if (updates.country !== undefined) patch.country = updates.country;
+      if (updates.city !== undefined) patch.city = updates.city;
+      if (updates.latitude !== undefined) patch.latitude = updates.latitude;
+      if (updates.longitude !== undefined) patch.longitude = updates.longitude;
+      const { error } = await supabase.from("sessions").update(patch).eq("id", sessionId);
+      if (error) console.error("upgradeLoaderSession error:", error.message);
+      return;
+    }
     const db = readLocalDb();
     const session = db.sessions.find((s) => s.id === sessionId);
     if (session) {
@@ -2266,6 +2294,32 @@ export const dbService = {
   },
 
   async addSessionCommand(sessionId: string, command: Omit<SessionCommand, "id">) {
+    if (isSupabaseConfigured && supabase) {
+      // Atomic append in the database (the old path only worked if this instance had the session in memory).
+      if (!UUID_RE.test(sessionId)) return;
+      const cmd = { id: crypto.randomUUID(), ...command };
+      const { error } = await supabase.rpc("push_session_command", {
+        p_session_id: sessionId,
+        p_command: cmd,
+        p_kick: command.type === "kick",
+      });
+      if (error && (error.code === "PGRST202" || error.code === "42883")) {
+        // migration 002 not applied yet: non-atomic fallback so kicks still work meanwhile
+        const { data: row } = await supabase.from("sessions").select("pending_commands, status").eq("id", sessionId).maybeSingle();
+        if (row) {
+          await supabase
+            .from("sessions")
+            .update({
+              pending_commands: [...((row.pending_commands as SessionCommand[]) || []), cmd],
+              status: command.type === "kick" ? "kicked" : row.status,
+            })
+            .eq("id", sessionId);
+        }
+      } else if (error) {
+        console.error("push_session_command error:", error.message);
+      }
+      return;
+    }
     const db = readLocalDb();
     const session = db.sessions.find((s) => s.id === sessionId);
     if (session) {
@@ -2322,6 +2376,20 @@ export const dbService = {
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from("global_announcements").insert([record]);
+        // Deliver to every player who pinged in the last 15s (was: only sessions in this instance's memory).
+        const { error } = await supabase.rpc("push_command_to_active", {
+          p_command: {
+            id: crypto.randomUUID(),
+            type: "announcement",
+            title: announcement.title,
+            message: announcement.message,
+            duration_seconds: announcement.duration_seconds || 10,
+          },
+          p_script: announcement.script_id || "all",
+          p_max_age_seconds: 15,
+          p_kick: false,
+        });
+        if (error) console.error("push_command_to_active error:", error.message);
       } catch (err) {
         console.error("Supabase broadcastAnnouncement error:", err);
       }
@@ -2386,6 +2454,16 @@ export const dbService = {
   },
 
   async broadcastCommand(command: Omit<SessionCommand, "id">, scriptId?: string): Promise<number> {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase.rpc("push_command_to_active", {
+        p_command: { id: crypto.randomUUID(), ...command },
+        p_script: scriptId || "all",
+        p_max_age_seconds: 15,
+        p_kick: command.type === "kick",
+      });
+      if (error) console.error("push_command_to_active error:", error.message);
+      return typeof data === "number" ? data : 0;
+    }
     const db = readLocalDb();
     const now = Date.now();
     let count = 0;
@@ -2408,6 +2486,23 @@ export const dbService = {
   },
 
   async clearPendingCommands(sessionId: string): Promise<SessionCommand[]> {
+    if (isSupabaseConfigured && supabase) {
+      // Read-and-clear atomically, so a command is delivered exactly once.
+      if (!UUID_RE.test(sessionId)) return [];
+      const { data, error } = await supabase.rpc("take_session_commands", { p_session_id: sessionId });
+      if (error && (error.code === "PGRST202" || error.code === "42883")) {
+        // migration 002 not applied yet: non-atomic fallback
+        const { data: row } = await supabase.from("sessions").select("pending_commands").eq("id", sessionId).maybeSingle();
+        const cmds = ((row?.pending_commands as SessionCommand[]) || []);
+        if (cmds.length) await supabase.from("sessions").update({ pending_commands: [] }).eq("id", sessionId);
+        return cmds;
+      }
+      if (error) {
+        console.error("take_session_commands error:", error.message);
+        return [];
+      }
+      return Array.isArray(data) ? (data as SessionCommand[]) : [];
+    }
     const db = readLocalDb();
     const session = db.sessions.find((s) => s.id === sessionId);
     if (!session) return [];
@@ -2478,6 +2573,17 @@ export const dbService = {
   },
 
   async updateStaffReviewHeartbeat(sessionToken: string): Promise<StaffReviewRecord | null> {
+    if (isSupabaseConfigured && supabase) {
+      const review = await this.getStaffReviewById(sessionToken);
+      if (!review) return null;
+      const now = new Date();
+      const duration = Math.max(0, Math.floor((now.getTime() - new Date(review.review_started).getTime()) / 1000));
+      await supabase
+        .from("staff_reviews")
+        .update({ last_heartbeat: now.toISOString(), duration_seconds: duration, status: "reviewing" })
+        .eq("id", review.id);
+      return { ...review, last_heartbeat: now.toISOString(), duration_seconds: duration, status: "reviewing" };
+    }
     const db = readLocalDb();
     if (!db.staff_reviews) db.staff_reviews = [];
     const review = db.staff_reviews.find((r) => r.id === sessionToken);
@@ -2510,6 +2616,31 @@ export const dbService = {
   },
 
   async getStaffReviews(): Promise<StaffReviewRecord[]> {
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from("staff_reviews")
+        .select("*")
+        .order("review_started", { ascending: false })
+        .limit(200);
+      if (error || !data) return [];
+      // Reviews with no heartbeat for 6s are finished; persist that so every instance agrees.
+      const now = Date.now();
+      const finished: StaffReviewRecord[] = [];
+      for (const r of data as StaffReviewRecord[]) {
+        const ping = new Date(r.last_heartbeat).getTime();
+        if (r.status === "reviewing" && now - ping > 6000) {
+          r.status = "completed";
+          r.duration_seconds = Math.max(0, Math.floor((ping - new Date(r.review_started).getTime()) / 1000));
+          finished.push(r);
+        }
+      }
+      await Promise.all(
+        finished.map((r) =>
+          supabase!.from("staff_reviews").update({ status: "completed", duration_seconds: r.duration_seconds }).eq("id", r.id)
+        )
+      );
+      return data as StaffReviewRecord[];
+    }
     const db = readLocalDb();
     if (!db.staff_reviews) db.staff_reviews = [];
     const now = Date.now();
@@ -2959,7 +3090,9 @@ export const dbService = {
 
   async saveSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
     const db = readLocalDb();
-    db.settings = { ...db.settings, ...settings };
+    // Merge onto the CURRENT saved settings (from the database), not the built-in defaults —
+    // otherwise saving one field would silently reset every other field.
+    db.settings = { ...(await this.getSettings()), ...settings };
     writeLocalDb(db);
 
     if (isSupabaseConfigured && supabase) {
@@ -3831,6 +3964,8 @@ export const dbService = {
 
   async saveCreatorProfile(profile: Partial<CreatorProfile>): Promise<CreatorProfile> {
     const db = readLocalDb();
+    // Start from the CURRENT saved profile (database), not the built-in defaults.
+    db.creator_profile = await this.getCreatorProfile();
     db.creator_profile = {
       ...(db.creator_profile || defaultCreatorProfile),
       ...profile,
@@ -4201,7 +4336,18 @@ export const dbService = {
     // Cooldown check for regular players (dev messages bypass cooldown)
     if (!msg.is_dev) {
       const cooldownSecs = await this.getChatroomCooldown();
-      if (cooldownSecs > 0) {
+      // Shared across instances (Redis / Postgres). The old per-instance Map let players dodge
+      // the cooldown just by landing on a different server.
+      if (cooldownSecs > 0 && isSupabaseConfigured) {
+        if (!(await this.consumeNonce("chatcd:" + String(msg.user_id), cooldownSecs))) {
+          return {
+            success: false,
+            rateLimited: true,
+            remaining: cooldownSecs,
+            error: `Slow down! Chat cooldown is active. Please wait up to ${cooldownSecs} second${cooldownSecs === 1 ? "" : "s"}.`,
+          };
+        }
+      } else if (cooldownSecs > 0) {
         const lastSent = lastChatTimeByUser.get(String(msg.user_id));
         const now = Date.now();
         if (lastSent && now - lastSent < cooldownSecs * 1000) {
