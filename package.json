@@ -10,14 +10,17 @@
     "test:obfuscator": "node lib/obfuscator/tools/run-all.js"
   },
   "dependencies": {
+    "@sentry/nextjs": "11.10.0",
     "@supabase/supabase-js": "^2.45.6",
     "@types/ws": "^8.18.2",
+    "@upstash/redis": "1.40.0",
     "clsx": "^2.1.1",
     "d3-geo": "3.1.1",
     "i18n-iso-countries": "7.14.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.453.0",
     "next": "^16.4.6",
+    "qrcode": "1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4",
@@ -26,14 +29,22 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.2.17",
     "@types/d3-geo": "3.1.0",
     "@types/node": "^20.17.0",
+    "@types/qrcode": "1.5.6",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
     "@types/topojson-client": "3.1.5",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "4.1.12"
+  },
+  "overrides": {
+    "@sentry/bundler-plugins": {
+      "glob": "14.0.3"
+    }
   }
 }

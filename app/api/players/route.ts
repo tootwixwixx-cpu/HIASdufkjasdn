@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
+import { adminAlert } from "@/lib/alerts";
 
 export async function GET() {
   if (!(await isAuthenticated())) {
@@ -261,6 +262,12 @@ export async function POST(req: NextRequest) {
       });
       // Remote code execution on a player's client — always leave an audit trail.
       void dbService.audit("players.execute_code", { target: String(session_id), details: { bytes: String(code).length } });
+      void adminAlert(
+        "remote_code",
+        "Remote Lua code sent to a player",
+        { Session: String(session_id).slice(0, 36), Bytes: String(code).length },
+        { dedupKey: `${session_id}:${Date.now()}`, windowSec: 1 }
+      );
       return NextResponse.json({ success: true, message: "Luau code dispatched to player session." });
     }
 

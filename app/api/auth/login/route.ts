@@ -3,6 +3,7 @@ import { verifyCredentials, AUTH_COOKIE_NAME, SESSION_HOURS, createAdminSession 
 import { dbService } from "@/lib/store";
 import { getClientIp } from "@/lib/ip";
 import { isTotpConfigured, verifyTotp } from "@/lib/totp";
+import { adminAlert } from "@/lib/alerts";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,15 @@ export async function POST(req: NextRequest) {
 
     if (!verifyCredentials(username.trim(), password.trim())) {
       void dbService.audit("admin.login_failed", { ip, details: { reason: "bad_credentials" } });
+      // 3rd failure from the same IP within 15 minutes → alert
+      if (!(await dbService.rateLimit("admin-login-fail", ip, 2, 15 * 60))) {
+        void adminAlert(
+          "admin_login_failures",
+          "Repeated failed admin logins",
+          { IP: ip, Device: (req.headers.get("user-agent") || "").slice(0, 120) },
+          { dedupKey: ip, windowSec: 15 * 60 }
+        );
+      }
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
@@ -55,6 +65,12 @@ export async function POST(req: NextRequest) {
       userAgent: req.headers.get("user-agent") || "",
     });
     void dbService.audit("admin.login", { ip });
+    void adminAlert(
+      "admin_login",
+      "Admin signed in",
+      { IP: ip, Device: (req.headers.get("user-agent") || "").slice(0, 120) },
+      { dedupKey: ip, windowSec: 3600 }
+    );
 
     const response = NextResponse.json({
       success: true,

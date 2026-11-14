@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
+import { adminAlert } from "@/lib/alerts";
 import { obfuscateLuauVM, bundleModules, verifyLuauBytecode } from "@/lib/obfuscator";
 
 export async function GET() {
@@ -259,6 +260,7 @@ export async function DELETE(req: NextRequest) {
 
     await dbService.deleteScript(id);
     void dbService.audit("scripts.delete", { target: id });
+    void adminAlert("script_deleted", "Script deleted", { "Script ID": id }, { dedupKey: id, windowSec: 60 });
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Error deleting script";

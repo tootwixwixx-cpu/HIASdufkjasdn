@@ -8,6 +8,7 @@ import { syncScriptFromGitHub } from "@/lib/github-sync";
 import { sendExecutionWebhook } from "@/lib/discord-webhook";
 import { getClientIp, normalizeIp, getClientGeo } from "@/lib/ip";
 import { encryptSessionPayload } from "@/lib/crypto-util";
+import { adminAlert } from "@/lib/alerts";
 
 function isMaliciousScraper(userAgent: string): boolean {
   const lower = userAgent.toLowerCase();
@@ -391,6 +392,12 @@ export async function POST(req: NextRequest) {
       const underSoftLimit = await dbService.rateLimit("bad-key-soft", clientIp, 4, FAILED_KEY_WINDOW_MS / 1000);
 
       if (!underBanLimit) {
+        void adminAlert(
+          "ip_banned_bruteforce",
+          "IP banned for license-key brute forcing",
+          { IP: clientIp, Script: targetScriptName, Executor: detectedExecutor },
+          { dedupKey: clientIp, windowSec: 3600 }
+        );
         await dbService.banIp(
           clientIp,
           `Brute-Force Key Guessing Attack (${MAX_FAILED_KEY_PROBES}+ invalid key probes in 5 minutes)`
@@ -715,6 +722,16 @@ export async function POST(req: NextRequest) {
       status: "success",
       failure_reason: null,
     });
+
+    // First successful run from a country not seen in the last 30 days (deduped per country).
+    if (clientGeo.country) {
+      void adminAlert(
+        "new_country",
+        `New country: first player from ${clientGeo.country} in 30 days`,
+        { Country: clientGeo.country, City: clientGeo.city, Script: targetScriptName },
+        { dedupKey: clientGeo.country, windowSec: 30 * 86400 }
+      );
+    }
 
     // FIX: webhookResolved flag ensures we skip redundant DB call here — already fetched at request start
     if (!webhookResolved || (!webhookEnabled && !webhookUrl)) {

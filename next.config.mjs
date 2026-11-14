@@ -36,7 +36,9 @@ const nextConfig = {
     // dev machine (ENOSPC crashes during `next dev`/`next build`). Disabling
     // it trades some rebuild speed for not exhausting disk. If you're on a
     // machine with ample free disk, feel free to remove this override.
-    if (dev) {
+    // Also off for local production builds (the cache is ~450 MB and filled the drive again).
+    // Kept on Vercel, where it speeds up deploys and disk isn't a concern.
+    if (dev || !process.env.VERCEL) {
       config.cache = false;
     }
     return config;

@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { normalizeIp } from "./ip";
+import { kvRateLimit, kvConsumeOnce, kvGetJSON, kvSetJSON, kvGetDelJSON, kvDel, isRedisConfigured } from "./kv";
+import { adminAlert } from "./alerts";
 
 export interface LoaderConfigRecord {
   id: string;
@@ -106,6 +108,7 @@ const memProbeSessions = new Map<
 function invalidateScriptCaches() {
   scriptBySlugCache.clear();
   scriptsLiteCache = null;
+  void kvDel("scripts:lite"); // shared copy, so other instances see changes immediately
 }
 
 export interface KeyRecord {
@@ -760,6 +763,11 @@ export const dbService = {
       return scriptsLiteCache.value;
     }
     if (scriptsLiteInflight.p) return scriptsLiteInflight.p;
+    const shared = await kvGetJSON<ScriptRecord[]>("scripts:lite");
+    if (Array.isArray(shared)) {
+      scriptsLiteCache = { at: now, value: shared };
+      return shared;
+    }
 
     scriptsLiteInflight.p = (async () => {
       const local = readLocalDb().scripts;
@@ -782,6 +790,7 @@ export const dbService = {
               } as ScriptRecord;
             });
             scriptsLiteCache = { at: Date.now(), value: result };
+            void kvSetJSON("scripts:lite", result, 30);
           }
         } catch (err) {
           console.error("Supabase getScriptsLite error:", err);
@@ -1694,6 +1703,8 @@ export const dbService = {
 
   /** Returns true if the action is allowed (under the limit), false if it should be blocked. */
   async rateLimit(bucket: string, key: string, limit: number, windowSeconds: number): Promise<boolean> {
+    const viaKv = await kvRateLimit(bucket, key, limit, windowSeconds);
+    if (viaKv !== null) return viaKv;
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.rpc("rate_limit_hit", {
@@ -1725,6 +1736,8 @@ export const dbService = {
 
   /** Returns true the first time a nonce is seen within the TTL, false on replay. */
   async consumeNonce(nonce: string, ttlSeconds: number = 300): Promise<boolean> {
+    const viaKv = await kvConsumeOnce("nonce:" + nonce, ttlSeconds);
+    if (viaKv !== null) return viaKv;
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.rpc("consume_nonce", { p_nonce: nonce, p_ttl_seconds: ttlSeconds });
@@ -1753,6 +1766,14 @@ export const dbService = {
     ip: string;
     ttlSeconds: number;
   }): Promise<void> {
+    if (isRedisConfigured) {
+      const ok = await kvSetJSON(
+        "probe:" + s.session_id,
+        { slug: s.slug, salt: s.salt, expected: s.expected, ip: s.ip },
+        s.ttlSeconds
+      );
+      if (ok) return;
+    }
     if (isSupabaseConfigured && supabase) {
       try {
         const { error } = await supabase.rpc("create_probe_session", {
@@ -1775,6 +1796,11 @@ export const dbService = {
   async consumeProbeSession(
     sessionId: string
   ): Promise<{ slug: string; salt: string; expected: number; ip: string } | null> {
+    if (isRedisConfigured) {
+      const v = await kvGetDelJSON<{ slug: string; salt: string; expected: number; ip: string }>("probe:" + sessionId);
+      if (v) return { ...v, expected: Number(v.expected) };
+      // null = not in Redis (it may have been stored in Postgres during a Redis hiccup) → check there too
+    }
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.rpc("consume_probe_session", { p_session_id: sessionId });
@@ -1818,6 +1844,12 @@ export const dbService = {
     const now = Date.now();
     const cached = adminSessionCache.get(tokenHash);
     if (cached && now - cached.at < 15000) return cached.ok;
+    // Shared cache: a revocation on one instance is seen by all of them immediately.
+    const shared = await kvGetJSON<boolean>("adm:" + tokenHash);
+    if (typeof shared === "boolean") {
+      adminSessionCache.set(tokenHash, { ok: shared, at: now });
+      return shared;
+    }
     try {
       const { data, error } = await supabase
         .from("admin_sessions")
@@ -1827,6 +1859,7 @@ export const dbService = {
       if (error) throw error;
       const ok = Boolean(data && data.is_active && new Date(data.expires_at).getTime() > now);
       adminSessionCache.set(tokenHash, { ok, at: now });
+      void kvSetJSON("adm:" + tokenHash, ok, 15);
       if (adminSessionCache.size > 500) adminSessionCache.clear();
       if (ok && data && now - new Date(data.last_active_at).getTime() > 5 * 60 * 1000) {
         void supabase.from("admin_sessions").update({ last_active_at: new Date().toISOString() }).eq("token_hash", tokenHash);
@@ -1841,6 +1874,7 @@ export const dbService = {
 
   async revokeAdminSession(tokenHash: string): Promise<void> {
     adminSessionCache.set(tokenHash, { ok: false, at: Date.now() });
+    await kvSetJSON("adm:" + tokenHash, false, 3600);
     if (isSupabaseConfigured && supabase) {
       await supabase.from("admin_sessions").update({ is_active: false }).eq("token_hash", tokenHash);
     }
@@ -1849,6 +1883,9 @@ export const dbService = {
   async revokeAllAdminSessions(): Promise<void> {
     adminSessionCache.clear();
     if (isSupabaseConfigured && supabase) {
+      // Mark every live session revoked in the shared cache so all instances drop them at once.
+      const { data: live } = await supabase.from("admin_sessions").select("token_hash").eq("is_active", true);
+      await Promise.all((live || []).map((r: { token_hash: string }) => kvSetJSON("adm:" + r.token_hash, false, 3600)));
       await supabase.from("admin_sessions").update({ is_active: false }).eq("is_active", true);
     }
   },
@@ -1862,6 +1899,11 @@ export const dbService = {
     const now = Date.now();
     const cached = playerSessionCache.get(cacheKey);
     if (cached && now - cached.at < (cached.value ? 30000 : 10000)) return cached.value;
+    const shared = await kvGetJSON<{ s: SessionRecord | null }>("ps:" + cacheKey);
+    if (shared) {
+      playerSessionCache.set(cacheKey, { at: now, value: shared.s });
+      return shared.s;
+    }
 
     let found: SessionRecord | null = null;
     if (isSupabaseConfigured && supabase) {
@@ -1888,6 +1930,7 @@ export const dbService = {
     }
     if (playerSessionCache.size > 2000) playerSessionCache.clear();
     playerSessionCache.set(cacheKey, { at: now, value: found });
+    void kvSetJSON("ps:" + cacheKey, { s: found }, found ? 30 : 10);
     return found;
   },
 
@@ -1949,6 +1992,11 @@ export const dbService = {
   async getOnlineCount(maxAgeMs: number = 35000): Promise<number> {
     const now = Date.now();
     if (onlineCountCache && now - onlineCountCache.at < 10000) return onlineCountCache.value;
+    const shared = await kvGetJSON<number>("online:" + maxAgeMs);
+    if (typeof shared === "number") {
+      onlineCountCache = { at: now, value: shared };
+      return shared;
+    }
     let value = 0;
     if (isSupabaseConfigured && supabase) {
       try {
@@ -1964,6 +2012,7 @@ export const dbService = {
       }
     }
     onlineCountCache = { at: now, value };
+    void kvSetJSON("online:" + maxAgeMs, value, 10);
     return value;
   },
 
@@ -2788,19 +2837,42 @@ export const dbService = {
       }
     }
 
-    // Count attempts for this IP or HWID
-    const matchingAttempts = db.bypass_attempts.filter((a) => {
-      const matchIp = a.ip_address === cleanIp;
-      const matchHwid = Boolean(cleanHwid && a.hwid && a.hwid.trim() === cleanHwid);
-      return matchIp || matchHwid;
-    });
+    // Count attempts for this IP or HWID. With Supabase configured, count in the database (the
+    // local copy is per-instance on serverless, so strikes were being counted separately per
+    // instance). Union = byIp + byHwid - both. Separate parameterised filters (hwid is client input).
+    let attemptCount: number;
+    if (isSupabaseConfigured && supabase) {
+      const head = () => supabase!.from("bypass_attempts").select("id", { count: "exact", head: true });
+      const [byIp, byHwid, both] = await Promise.all([
+        head().eq("ip_address", cleanIp),
+        cleanHwid ? head().eq("hwid", cleanHwid) : Promise.resolve({ count: 0 }),
+        cleanHwid ? head().eq("ip_address", cleanIp).eq("hwid", cleanHwid) : Promise.resolve({ count: 0 }),
+      ]);
+      attemptCount = (byIp.count || 0) + (byHwid.count || 0) - (both.count || 0);
+    } else {
+      attemptCount = db.bypass_attempts.filter((a) => {
+        const matchIp = a.ip_address === cleanIp;
+        const matchHwid = Boolean(cleanHwid && a.hwid && a.hwid.trim() === cleanHwid);
+        return matchIp || matchHwid;
+      }).length;
+    }
 
-    const attemptCount = matchingAttempts.length;
     const bannedIps: string[] = [];
     const bannedHwids: string[] = [];
 
+    // Spike detection across everyone: 10+ bypass attempts in 10 minutes.
+    if (!(await this.rateLimit("bypass-spike", "all", 10, 600))) {
+      void adminAlert("bypass_spike", "Checkpoint bypass spike", { "Attempts (10 min)": "10+", "Latest reason": reason }, { windowSec: 600 });
+    }
+
     // Auto-lockout rule: 3 or more attempts locks out IP and HWID permanently
     if (attemptCount >= 3) {
+      void adminAlert(
+        "bypass_lockout",
+        "Bypass lockout triggered",
+        { IP: cleanIp, HWID: cleanHwid || "—", Attempts: attemptCount, Reason: reason },
+        { dedupKey: cleanIp, windowSec: 3600 }
+      );
       const lockoutReason = `Automated Security Lockout: 3 bypass attempts recorded on checkpoint claim (Latest: ${reason})`;
       if (cleanIp && cleanIp !== "127.0.0.1") {
         await this.banIp(cleanIp, lockoutReason);
