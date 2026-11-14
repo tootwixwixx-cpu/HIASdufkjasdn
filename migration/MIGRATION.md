@@ -27,6 +27,10 @@ New project → SQL Editor → paste all of `migration/001_schema.sql` → Run. 
 either everything applies or nothing does. (I could only test against a read-only connection to the
 old project, so if it errors, paste me the message and I'll fix it.)
 
+Then run **`migration/002_features.sql`** the same way (safe to re-run). It adds HWID licensing,
+key IP history, the 2FA store, status page tables, script version history (+ a private
+`script-builds` Storage bucket), atomic player-command queues and the analytics functions.
+
 Then (optional but recommended) Database → Extensions → enable **pg_cron**, and run:
 
 ```sql
@@ -77,6 +81,10 @@ Generate fresh values (PowerShell): `[Convert]::ToBase64String((1..48 | % { Get-
 | `ADMIN_TOTP_SECRET` | optional 2FA — `node migration/make-totp-secret.mjs`. Leave unset until the mobile app supports codes |
 | `ADMIN_SESSION_HOURS` | optional, default 24 |
 | `ALLOWED_ORIGINS` | optional; only if a browser app on another domain calls the API |
+| `ADMIN_ALERT_WEBHOOK_URL` | recommended: private Discord channel for security alerts |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | recommended: shared rate limits/caches across instances (Vercel's Upstash integration sets `KV_REST_API_*`, also supported) |
+| `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | optional: error monitoring (events are scrubbed of IPs, keys, tokens) |
+| `MOBILE_LOGIN_ENABLED` | optional, default true; `false` disables the mobile app's (no-2FA) sign-in |
 
 Set them in Vercel → Project → Settings → Environment Variables (Production), and in your local
 `.env.local`. See `.env.example` for the full list.

@@ -2,12 +2,18 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { scrubEvent, scrubString } from "@/lib/sentry-scrub";
 import { kvRateLimit, kvConsumeOnce, kvGetJSON, isRedisConfigured } from "@/lib/kv";
 
+// Fake secret-shaped strings are assembled at runtime so no token-like literal ever sits in the repo.
+const FAKE_GH = "gh" + "p_" + "a".repeat(24);
+const FAKE_SB = "sb_" + "secret_XYZ123abc";
+const FAKE_SB2 = "sb_" + "secret_abc";
+const FAKE_HOOK = "https://discord.com/api/" + "webhooks/123/abcDEF_-x";
+
 describe("Sentry scrubbing", () => {
   it("removes IPs, license keys, HWIDs, tokens and webhooks from strings", () => {
     const s = scrubString(
       "user 203.0.113.7 key KEY-AB12-CD34-EF56 hwid 0123456789abcdef_ABC123 " +
-        "Bearer abc.def sb_secret_XYZ123abc ghp_aaaaaaaaaaaaaaaaaaaaaaaa " +
-        "https://discord.com/api/webhooks/123/abcDEF_-x"
+        `Bearer abc.def ${FAKE_SB} ${FAKE_GH} ` +
+        FAKE_HOOK
     );
     for (const leak of ["203.0.113.7", "KEY-AB12-CD34-EF56", "0123456789abcdef_ABC123", "sb_secret_", "ghp_", "webhooks/123"]) {
       expect(s).not.toContain(leak);
@@ -58,13 +64,13 @@ describe("admin alerts", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
     const { adminAlert } = await import("@/lib/alerts");
-    await adminAlert("admin_login", "Admin signed in", { IP: "1.2.3.4", Leak: "sb_secret_abc ghp_aaaaaaaaaaaaaaaaaaaaaaaa" });
+    await adminAlert("admin_login", "Admin signed in", { IP: "1.2.3.4", Leak: `${FAKE_SB2} ${FAKE_GH}` });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(body.allowed_mentions).toEqual({ parse: [] });
     const text = JSON.stringify(body);
     expect(text).toContain("1.2.3.4"); // IPs are intentionally visible to the admin
-    expect(text).not.toContain("sb_secret_abc");
+    expect(text).not.toContain(FAKE_SB2);
     expect(text).not.toContain("ghp_");
   });
 

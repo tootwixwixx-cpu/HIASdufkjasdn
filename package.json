@@ -7,6 +7,10 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run && npm run test:schema",
+    "test:unit": "vitest run",
+    "test:schema": "node tests/schema/schema-001.mjs && node tests/schema/schema-002.mjs",
+    "test:smoke": "node tests/smoke/run-smoke.mjs",
     "test:obfuscator": "node lib/obfuscator/tools/run-all.js"
   },
   "dependencies": {

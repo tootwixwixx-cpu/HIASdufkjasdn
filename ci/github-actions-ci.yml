@@ -1,0 +1,34 @@
+# GitHub Actions CI. To enable it, this file must live at .github/workflows/ci.yml.
+# It's kept here because .github/ is gitignored in this repo and the token used for pushes has no
+# "workflow" scope (GitHub rejects pushes that touch workflows without it). Easiest way to add it:
+# GitHub → Add file → Create new file → name it .github/workflows/ci.yml → paste this file.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit -p .
+      - name: Unit tests
+        run: npm run test:unit
+      - name: Schema tests (real Postgres via PGlite)
+        run: npm run test:schema
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+      - name: Smoke tests (attack-style checks against the build, no database)
+        run: npm run test:smoke
