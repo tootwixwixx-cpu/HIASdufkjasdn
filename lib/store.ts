@@ -203,6 +203,19 @@ export interface StatusPageData {
 
 /** In-game device fingerprint produced by the loader: 16 hex chars + "_" + up to 40 printable chars. */
 export const HWID_RE = /^[a-f0-9]{16}_[!-~]{1,40}$/;
+
+/**
+ * Canonical form of the loader's fingerprint. The suffix is the first 10 chars of the executor's own
+ * gethwid() (or the Roblox user id), which on some executors contains spaces / non-ASCII characters;
+ * strip those instead of rejecting the player. Returns "" if there's no usable 16-hex hash part.
+ */
+export function normalizeHwid(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const m = raw.trim().match(/^([a-fA-F0-9]{16})_([\s\S]*)$/);
+  if (!m) return "";
+  const suffix = m[2].replace(/[^!-~]/g, "").slice(0, 40) || "x";
+  return `${m[1].toLowerCase()}_${suffix}`;
+}
 export const HWID_RESET_COOLDOWN_HOURS = 12;
 
 export function isStaffReviewKey(k: KeyRecord | null | undefined): boolean {
@@ -3576,6 +3589,46 @@ export const dbService = {
     );
   },
 
+  /** The script and start time of a checkpoint session (from its "started" log), or null. */
+  async getCheckpointSessionInfo(sessionId: string): Promise<{ script_id: string | null; created_at: string } | null> {
+    if (!sessionId || !UUID_RE.test(sessionId)) return null;
+    if (isSupabaseConfigured && supabase) {
+      const { data } = await supabase
+        .from("checkpoint_logs")
+        .select("script_id, created_at")
+        .eq("session_id", sessionId)
+        .eq("stage", "started")
+        .order("created_at", { ascending: true })
+        .limit(1);
+      return data && data.length ? (data[0] as { script_id: string | null; created_at: string }) : null;
+    }
+    const l = (readLocalDb().checkpoint_logs || []).find((x) => x.session_id === sessionId && x.stage === "started");
+    return l ? { script_id: l.script_id || null, created_at: l.created_at } : null;
+  },
+
+  /** Step indexes recorded as completed for a checkpoint session (server truth for Work.ink progress). */
+  async getCompletedSteps(sessionId: string): Promise<number[]> {
+    if (!sessionId) return [];
+    if (isSupabaseConfigured && supabase) {
+      const { data, error } = await supabase
+        .from("checkpoint_logs")
+        .select("step_index")
+        .eq("session_id", sessionId)
+        .eq("stage", "step_completed")
+        .not("step_index", "is", null)
+        .limit(100);
+      if (!error && data) return Array.from(new Set(data.map((r: { step_index: number }) => r.step_index)));
+    }
+    const logs = readLocalDb().checkpoint_logs || [];
+    return Array.from(
+      new Set(
+        logs
+          .filter((l) => l.session_id === sessionId && l.stage === "step_completed" && typeof l.step_index === "number")
+          .map((l) => l.step_index as number)
+      )
+    );
+  },
+
   async recordCheckpoint(
     stage: "started" | "completed" | "step_started" | "step_completed",
     ip: string,
@@ -4230,23 +4283,21 @@ export const dbService = {
     }
 
     const clean = scriptId.trim().toLowerCase();
-    const scripts = await this.getScripts();
+    const scripts = await this.getScriptsLite(); // metadata only (was: every script's full payload)
     const matchedScript = scripts.find(
       (s) => s.id.toLowerCase() === clean || s.slug.toLowerCase() === clean || s.name.toLowerCase() === clean
     );
     const targetId = matchedScript ? matchedScript.id : scriptId;
 
-    const filtered = all.filter(
-      (cp) =>
-        cp.script_id === targetId ||
-        cp.script_id === clean ||
-        (matchedScript && cp.script_id === matchedScript.slug) ||
-        cp.script_id === "all" ||
-        !cp.script_id
+    // Each script has its own checkpoint set (Work.ink and regular). If it has none, it uses the
+    // shared default set ("all"). It never receives another script's checkpoints — previously a
+    // script with no checkpoints of its own fell back to EVERY checkpoint of every script, and
+    // shared ones were always mixed in, which made everything behave like one pool.
+    const own = all.filter(
+      (cp) => cp.script_id === targetId || (matchedScript && cp.script_id === matchedScript.slug)
     );
-
-    // If script-specific checkpoints exist, return them; otherwise if any checkpoints exist, return all
-    return filtered.length > 0 ? filtered : all;
+    const set = own.length > 0 ? own : all.filter((cp) => !cp.script_id || cp.script_id === "all");
+    return [...set].sort((a, b) => a.order - b.order);
   },
 
   async getAllCheckpoints(): Promise<CheckpointItem[]> {

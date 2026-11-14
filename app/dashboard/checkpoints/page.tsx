@@ -371,14 +371,19 @@ export default function CheckpointsPage() {
     }
   };
 
+  // Each script has its own checkpoint set. The form targets the script currently selected in the
+  // list filter (it used to snap back to "All scripts" after every save, which silently put every
+  // new checkpoint into one shared pool). Step numbers count within that script's set only.
+  const countForScript = (sid: string) => checkpoints.filter((cp) => (cp.script_id || "all") === sid).length;
+
   const resetCheckpointForm = () => {
     setEditingId(null);
-    setCpScriptId("all");
+    setCpScriptId(filterScript);
     setCpTitle("");
     setCpUrl("");
     setCpDuration(5);
     setIsWorkinkType(false);
-    setCpOrder(checkpoints.length + 1);
+    setCpOrder(countForScript(filterScript) + 1);
     setCheckpointError(null);
   };
 
@@ -386,7 +391,8 @@ export default function CheckpointsPage() {
     setEditingId(null);
     setIsWorkinkType(true);
     setCpDuration(0);
-    const nextOrder = checkpoints.length + 1;
+    setCpScriptId(filterScript);
+    const nextOrder = countForScript(filterScript) + 1;
     setCpOrder(nextOrder);
     setCpTitle(`Work.ink Task #${nextOrder}`);
     setCpUrl("");
@@ -530,12 +536,10 @@ export default function CheckpointsPage() {
     }
   };
 
-  const filteredCheckpoints = checkpoints.filter((cp) => {
-    if (filterScript === "all") return true;
-    const targetScriptObj = scripts.find((s) => s.id === filterScript || s.slug === filterScript);
-    const targetId = targetScriptObj ? targetScriptObj.id : filterScript;
-    return cp.script_id === targetId || cp.script_id === "all";
-  });
+  // Show exactly one set: a script's own checkpoints, or the shared default set ("all").
+  const filteredCheckpoints = checkpoints
+    .filter((cp) => (cp.script_id || "all") === filterScript)
+    .sort((a, b) => a.order - b.order);
 
   return (
     <div className="space-y-4">
@@ -705,7 +709,7 @@ export default function CheckpointsPage() {
                   onChange={(e) => setCpScriptId(e.target.value)}
                   className="w-full bg-surface border border-line-strong rounded-lg px-3 py-2 text-fg outline-none focus:border-accent"
                 >
-                  <option value="all">All Scripts (Global Default)</option>
+                  <option value="all">Shared default (used by scripts with no checkpoints of their own)</option>
                   {scripts.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} (/{s.slug})
@@ -842,10 +846,17 @@ export default function CheckpointsPage() {
                 <span className="text-micro text-fg-muted">Filter:</span>
                 <select
                   value={filterScript}
-                  onChange={(e) => setFilterScript(e.target.value)}
+                  onChange={(e) => {
+                    setFilterScript(e.target.value);
+                    // Retarget the add form to the script being viewed (unless editing an existing checkpoint).
+                    if (!editingId) {
+                      setCpScriptId(e.target.value);
+                      setCpOrder(countForScript(e.target.value) + 1);
+                    }
+                  }}
                   className="bg-surface border border-line-strong rounded-lg px-2.5 py-1 text-caption text-fg outline-none focus:border-accent"
                 >
-                  <option value="all">All Checkpoints</option>
+                  <option value="all">Shared default (scripts with none of their own)</option>
                   {scripts.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}

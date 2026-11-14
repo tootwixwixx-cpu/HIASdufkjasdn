@@ -78,23 +78,44 @@ export async function POST(req: NextRequest) {
               },
             ];
 
+      // Resume the visitor's existing checkpoint session (e.g. coming back from a Work.ink task or
+      // reloading). Previously every page load minted a new session, so steps finished under the old
+      // one no longer counted and the player was told to redo a task they had already completed.
+      // Only resumed if it exists, belongs to this same script and is less than 2 hours old.
+      let resumeId: string | undefined;
+      const resume = typeof body.resume_session_id === "string" ? body.resume_session_id : "";
+      if (resume) {
+        const info = await dbService.getCheckpointSessionInfo(resume);
+        if (
+          info &&
+          (info.script_id || "") === (targetScriptId || "") &&
+          Date.now() - new Date(info.created_at).getTime() < 2 * 3600 * 1000
+        ) {
+          resumeId = resume;
+        }
+      }
+
       const sessionData = antiBypassService.createSession(
         ip,
         userAgent,
         targetScriptId,
-        effectiveCheckpoints
+        effectiveCheckpoints,
+        resumeId
       );
 
-      // Log start checkpoint
-      await dbService.recordCheckpoint("started", ip, targetScriptId, {
-        sessionId: sessionData.sessionId,
-        stepIndex: 0,
-        checkpointTitle: effectiveCheckpoints[0]?.title || "Step 1",
-      });
+      if (!resumeId) {
+        await dbService.recordCheckpoint("started", ip, targetScriptId, {
+          sessionId: sessionData.sessionId,
+          stepIndex: 0,
+          checkpointTitle: effectiveCheckpoints[0]?.title || "Step 1",
+        });
+      }
 
       return NextResponse.json({
         success: true,
         ...sessionData,
+        resumed: Boolean(resumeId),
+        completed_steps: resumeId ? await dbService.getCompletedSteps(resumeId) : [],
       });
     }
 
@@ -244,13 +265,26 @@ export async function POST(req: NextRequest) {
       }
       const configuredSteps = await dbService.getCheckpoints(resolvedScriptId || undefined);
       const serverTotal = Math.max(1, configuredSteps.length);
-      const requestedStep = typeof stepIndex === "number" && stepIndex >= 0 ? Math.floor(stepIndex) : 0;
+      // The server decides which step this token completes: the first step of this session that
+      // isn't done yet. (The page's own step counter could drift after a reload, which used to make
+      // the server credit the wrong step and ask the player to redo a task they'd finished.)
+      const done = await dbService.getCompletedSteps(sessionId);
+      let requestedStep = 0;
+      while (done.includes(requestedStep)) requestedStep++;
+      void stepIndex; // client hint no longer trusted
       if (requestedStep >= serverTotal) {
-        return NextResponse.json({ success: false, error: "Invalid checkpoint step." }, { status: 400 });
-      }
-      if (requestedStep > 0 && !(await dbService.hasCheckpointLog(sessionId, "step_completed", requestedStep - 1))) {
         return NextResponse.json(
-          { success: false, error: "Please complete the previous checkpoint step first." },
+          { success: false, error: "All checkpoint steps are already completed. Use the claim button to get your key." },
+          { status: 400 }
+        );
+      }
+      const stepCp = configuredSteps[requestedStep];
+      const stepIsWorkink = Boolean(
+        stepCp && (Number(stepCp.duration_seconds) === 0 || stepCp.url?.includes("work.ink") || stepCp.url?.includes("workink.net"))
+      );
+      if (!stepIsWorkink) {
+        return NextResponse.json(
+          { success: false, error: `Step ${requestedStep + 1} is a timed checkpoint. Please complete it on this page first.` },
           { status: 400 }
         );
       }
@@ -294,6 +328,8 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         ...result,
+        stepIndex: currentStep, // the step the server credited, so the page marks the right one
+        completed_steps: [...done, currentStep],
         message: "Work.ink task verified successfully!",
       });
     }

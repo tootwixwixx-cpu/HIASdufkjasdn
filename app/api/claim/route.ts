@@ -3,7 +3,7 @@ import { publicError } from "@/lib/http-errors";
 import { dbService } from "@/lib/store";
 import { getClientIp } from "@/lib/ip";
 import { antiBypassService, createSignedToken, verifySignedToken } from "@/lib/anti-bypass";
-import { HWID_RE, HWID_RESET_COOLDOWN_HOURS } from "@/lib/store";
+import { HWID_RE, HWID_RESET_COOLDOWN_HOURS, normalizeHwid } from "@/lib/store";
 import { adminAlert } from "@/lib/alerts";
 
 // Per-key proof-of-ownership cookie so the full key is only re-shown to the browser that claimed it.
@@ -353,9 +353,10 @@ export async function POST(req: NextRequest) {
 
     // Pre-bind the device when the claim link came from the in-game loader (its ?id= is the same
     // fingerprint verify() checks). Otherwise the key binds on its first run.
-    if (HWID_RE.test(hwid)) {
+    const claimHwid = normalizeHwid(hwid);
+    if (HWID_RE.test(claimHwid)) {
       try {
-        await dbService.bindKeyHwid(claimedKey.id, hwid);
+        await dbService.bindKeyHwid(claimedKey.id, claimHwid);
       } catch {
         /* binding falls back to first run */
       }

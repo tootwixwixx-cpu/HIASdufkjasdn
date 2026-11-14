@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicError } from "@/lib/http-errors";
-import { dbService, isStaffReviewKey, HWID_RE, HWID_RESET_COOLDOWN_HOURS, type ScriptRecord } from "@/lib/store";
+import { dbService, isStaffReviewKey, HWID_RE, HWID_RESET_COOLDOWN_HOURS, normalizeHwid, type ScriptRecord } from "@/lib/store";
 import { bundleModularScript } from "@/lib/module-bundler";
 import { obfuscateLuauVM, bundleModules } from "@/lib/obfuscator";
 import { wrapPolymorphicLuau } from "@/lib/polymorphic";
@@ -534,7 +534,7 @@ export async function POST(req: NextRequest) {
     //    (mobile data / dynamic IPs). Staff review keys are unbound by design.
     let hwidMode: "hwid" | "legacy-ip" = "hwid";
     if (!isStaff) {
-      const hwidStr = typeof hwid === "string" ? hwid.trim() : "";
+      const hwidStr = normalizeHwid(hwid);
       if (!HWID_RE.test(hwidStr)) {
         await logAndNotifyFailure("Missing or malformed device fingerprint (HWID)");
         return NextResponse.json(

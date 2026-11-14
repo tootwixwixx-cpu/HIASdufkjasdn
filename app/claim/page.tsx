@@ -326,6 +326,18 @@ export default function ClaimKeyPage() {
   const initCheckpointSession = async (slug: string, hwidParam?: string) => {
     try {
       const activeHwid = hwidParam || claimId;
+      // Resume the saved checkpoint session (coming back from Work.ink / reloading) so steps already
+      // finished still count. The server only resumes it if it's real, recent and for this script.
+      let resumeSessionId: string | undefined;
+      let hasStoredClaimToken = false;
+      try {
+        const raw = localStorage.getItem(`atom_cp_progress_${slug || "default"}`) || sessionStorage.getItem(`atom_cp_progress_${slug || "default"}`);
+        if (raw) {
+          const p = JSON.parse(raw);
+          resumeSessionId = p.sessionId || undefined;
+          hasStoredClaimToken = Boolean(p.claimToken);
+        }
+      } catch {}
       const res = await fetch("/api/checkpoints/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -333,6 +345,7 @@ export default function ClaimKeyPage() {
           action: "start",
           script_slug: slug,
           hwid: activeHwid,
+          resume_session_id: resumeSessionId,
         }),
       });
       const data = await res.json();
@@ -361,6 +374,22 @@ export default function ClaimKeyPage() {
           );
           setStepGatewayUrls(data.stepDetails.map((s: any) => s.gatewayUrl));
           setStepGatewayTokens(data.stepDetails.map((s: any) => s.gatewayToken));
+
+          // Server truth for which steps this session has finished (survives lost browser storage).
+          const doneSteps: number[] = Array.isArray(data.completed_steps) ? data.completed_steps : [];
+          const doneIds = data.stepDetails
+            .filter((_: any, i: number) => doneSteps.includes(i))
+            .map((s: any) => s.id);
+          if (data.resumed) {
+            setCompletedCpIds((prev) => Array.from(new Set([...prev.filter((id) => doneIds.includes(id)), ...doneIds])));
+            let next = 0;
+            while (doneSteps.includes(next)) next++;
+            setActiveCpIndex(next);
+          } else if (resumeSessionId && !hasStoredClaimToken) {
+            // The saved session couldn't be resumed (expired / other script): its progress no longer counts.
+            setCompletedCpIds([]);
+            setActiveCpIndex(0);
+          }
         }
       }
     } catch (err) {
@@ -501,7 +530,8 @@ export default function ClaimKeyPage() {
     }
   }, [completedCpIds, activeCpIndex, claimToken, sessionId, stepEndTime, currentStepToken, workinkOpenedCpId, powChallenge, scriptSlug]);
 
-  // Restore checkpoint progress from localStorage / sessionStorage on load/reload (3-minute validity)
+  // Restore checkpoint progress from localStorage / sessionStorage on load/reload (60-minute validity,
+  // matching how long checkpoint links stay valid; 3 minutes was shorter than a typical Work.ink task)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const key = `atom_cp_progress_${scriptSlug || "default"}`;
@@ -510,7 +540,7 @@ export default function ClaimKeyPage() {
       if (raw) {
         const parsed = JSON.parse(raw);
         const age = Date.now() - (parsed.savedAt || 0);
-        const isValid = age <= 3 * 60 * 1000 || Boolean(parsed.claimToken);
+        const isValid = age <= 60 * 60 * 1000 || Boolean(parsed.claimToken);
 
         if (!isValid) {
           localStorage.removeItem(key);
@@ -560,6 +590,10 @@ export default function ClaimKeyPage() {
 
     if (!workinkToken) return;
 
+    // Wait until the (resumed) checkpoint session is known. Verifying before that used to send no or
+    // the wrong session, get rejected, and — because a Work.ink token is single-use — force a redo.
+    if (!sessionId) return;
+
     if ((window as any).__verifyingWorkinkToken === workinkToken) return;
     (window as any).__verifyingWorkinkToken = workinkToken;
 
@@ -570,17 +604,16 @@ export default function ClaimKeyPage() {
       const key = `atom_cp_progress_${scriptSlug || "default"}`;
       let currentIndex = activeCpIndex;
       let currentCompleted = [...completedCpIds];
-      let storedSessionId = sessionId;
+      const storedSessionId = sessionId; // set by the resumed "start" call, so it's the right session
 
       try {
         const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
         if (raw) {
           const parsed = JSON.parse(raw);
           const age = Date.now() - (parsed.savedAt || 0);
-          if (age <= 3 * 60 * 1000 || parsed.claimToken) {
+          if (age <= 60 * 60 * 1000 || parsed.claimToken) {
             if (typeof parsed.activeCpIndex === "number") currentIndex = parsed.activeCpIndex;
             if (Array.isArray(parsed.completedCpIds)) currentCompleted = parsed.completedCpIds;
-            if (parsed.sessionId) storedSessionId = parsed.sessionId;
           }
         }
       } catch {}
@@ -609,8 +642,14 @@ export default function ClaimKeyPage() {
 
         const data = await res.json();
         if (data.success) {
-          const newCompleted = Array.from(new Set([...currentCompleted, activeCp.id]));
+          // Mark exactly the steps the server has recorded for this session.
+          const creditedStep = typeof data.stepIndex === "number" ? data.stepIndex : stepToVerify;
+          const serverDone: number[] = Array.isArray(data.completed_steps) ? data.completed_steps : [creditedStep];
+          const serverDoneIds = checkpoints.filter((_, i) => serverDone.includes(i)).map((c) => c.id);
+          const newCompleted = Array.from(new Set([...currentCompleted, ...serverDoneIds, (checkpoints[creditedStep] || activeCp).id]));
           setCompletedCpIds(newCompleted);
+          let nextIdx = 0;
+          while (serverDone.includes(nextIdx)) nextIdx++;
 
           if (data.allCompleted && data.claimToken) {
             setClaimToken(data.claimToken);
@@ -618,17 +657,16 @@ export default function ClaimKeyPage() {
             setWorkinkOpenedCpId(null);
             setWorkinkSuccessMessage("All Work.ink tasks verified. Use the slider below to unlock your key.");
           } else {
-            const nextIdx = stepToVerify + 1;
             setActiveCpIndex(nextIdx);
             setWorkinkOpenedCpId(null);
-            setWorkinkSuccessMessage(`Work.ink step ${stepToVerify + 1} completed. Continue to the next task.`);
+            setWorkinkSuccessMessage(`Work.ink step ${creditedStep + 1} completed. Continue to the next task.`);
           }
 
           // Immediately persist fresh completion progress so tab-close/refresh retains it
           try {
             const updatedState = {
               completedCpIds: newCompleted,
-              activeCpIndex: data.allCompleted ? checkpoints.length : stepToVerify + 1,
+              activeCpIndex: data.allCompleted ? checkpoints.length : nextIdx,
               claimToken: data.claimToken || claimToken,
               sessionId: storedSessionId,
               workinkOpenedCpId: null,
@@ -717,6 +755,7 @@ export default function ClaimKeyPage() {
             action: "start",
             script_slug: scriptSlug || targetScript?.slug || "",
             hwid: claimId,
+            resume_session_id: sessionId || undefined, // keep the same session so finished steps still count
           }),
         });
         const initData = await initRes.json();

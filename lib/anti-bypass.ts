@@ -155,7 +155,9 @@ export const antiBypassService = {
     ip: string,
     userAgent: string,
     scriptId: string,
-    checkpoints: CheckpointItem[]
+    checkpoints: CheckpointItem[],
+    /** Resume an existing checkpoint session (same id → progress already recorded for it still counts). */
+    existingSessionId?: string
   ): {
     sessionId: string;
     totalSteps: number;
@@ -172,7 +174,7 @@ export const antiBypassService = {
     }[];
     powChallenge: { nonce: string; difficulty: number };
   } {
-    const sessionId = crypto.randomUUID();
+    const sessionId = existingSessionId || crypto.randomUUID();
     const sorted = [...checkpoints].sort((a, b) => a.order - b.order);
     const totalSteps = sorted.length;
     const powChallenge = generatePoWChallenge();
