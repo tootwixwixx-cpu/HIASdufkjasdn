@@ -134,6 +134,38 @@ export interface KeyRecord {
   last_seen_at?: string | null;
 }
 
+export interface CheckpointReport {
+  scope: { id: string; name: string } | null;
+  range_days: number;
+  summary: {
+    visitors: number; // players = distinct IP + script
+    sessions: number; // claim-page visits (a player who reloads or comes back has several)
+    unique_visitors: number; // distinct IPs
+    finished: number;
+    in_progress: number;
+    stopped: number;
+    completion_rate: number;
+    keys_claimed: number;
+    bypass_attempts: number;
+    median_minutes_to_finish: number | null;
+    biggest_drop: { step: number; title: string; count: number } | null;
+  };
+  funnel: { step: number; title: string; is_workink: boolean; reached: number; completed: number; stopped_here: number; in_progress_here: number }[];
+  daily: { day: string; started: number; finished: number }[];
+  recent: {
+    session: string;
+    ip: string;
+    script: string;
+    started_at: string;
+    last_at: string;
+    steps_done: number;
+    total: number;
+    status: "finished" | "in_progress" | "stopped";
+    step_title: string | null;
+    attempts: number;
+  }[];
+}
+
 export const SCRIPT_VERSIONS_KEPT = 10;
 export interface ScriptVersion {
   id: string;
@@ -4068,6 +4100,209 @@ export const dbService = {
     } catch (err) {
       console.warn("[autoPruneStaleLogs Warning]", err);
     }
+  },
+
+  /**
+   * Checkpoint completion report, built per checkpoint SESSION (one visit to the claim page, resumed
+   * across reloads / Work.ink round-trips). Replaces the dashboard's old analytics, which double-counted
+   * completions, reported the step BEFORE the one a player actually quit on, counted players still
+   * mid-task as drop-offs, and filled gaps with estimated numbers.
+   */
+  async getCheckpointReport(scriptId: string | undefined, rangeDays: number): Promise<CheckpointReport> {
+    const now = Date.now();
+    const since = rangeDays > 0 ? new Date(now - rangeDays * 86400 * 1000).toISOString() : null;
+    const IN_PROGRESS_MS = 60 * 60 * 1000; // sessions touched in the last hour are "in progress", not dropped
+
+    const scripts = await this.getScriptsLite();
+    const scope = scriptId && scriptId !== "all"
+      ? scripts.find((s) => s.id === scriptId || s.slug === scriptId) || null
+      : null;
+    const nameOf = (sid?: string | null) => scripts.find((s) => s.id === sid)?.name || (sid ? "Unknown script" : "—");
+
+    // Step titles: per script (each script has its own checkpoint set, or the shared default)
+    const stepsCache = new Map<string, CheckpointItem[]>();
+    const stepsFor = async (sid?: string | null) => {
+      const k = sid || "all";
+      if (!stepsCache.has(k)) stepsCache.set(k, await this.getCheckpoints(sid || undefined));
+      return stepsCache.get(k)!;
+    };
+
+    let logs: CheckpointLog[] = [];
+    let keysClaimed = 0;
+    let bypassCount = 0;
+    if (isSupabaseConfigured && supabase) {
+      // PostgREST returns at most 1000 rows per request → page newest-first (cap 20k rows), then put in time order.
+      const page = (from: number) => {
+        let q = supabase!
+          .from("checkpoint_logs")
+          .select("session_id, script_id, ip_address, stage, step_index, created_at")
+          .not("session_id", "is", null)
+          .order("created_at", { ascending: false })
+          .range(from, from + 999);
+        if (scope) q = q.eq("script_id", scope.id);
+        if (since) q = q.gte("created_at", since);
+        return q;
+      };
+      const fetchLogs = async () => {
+        const out: CheckpointLog[] = [];
+        for (let from = 0; from < 20000; from += 1000) {
+          const { data, error } = await page(from);
+          if (error || !data) break;
+          out.push(...(data as CheckpointLog[]));
+          if (data.length < 1000) break;
+        }
+        return out.reverse();
+      };
+      let kq = supabase.from("keys").select("id", { count: "exact", head: true }).not("claimed_at", "is", null);
+      if (scope) kq = kq.eq("script_id", scope.id);
+      if (since) kq = kq.gte("claimed_at", since);
+      let bq = supabase.from("bypass_attempts").select("id", { count: "exact", head: true });
+      if (scope) bq = bq.eq("script_id", scope.id);
+      if (since) bq = bq.gte("created_at", since);
+      const [l, k, b] = await Promise.all([fetchLogs(), kq, bq]);
+      logs = l;
+      keysClaimed = k.count || 0;
+      bypassCount = b.count || 0;
+    } else {
+      logs = (readLocalDb().checkpoint_logs || [])
+        .filter((x) => x.session_id && (!scope || x.script_id === scope.id) && (!since || x.created_at >= since))
+        .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    }
+
+    type S = { id: string; ip: string; script_id: string | null; started_at: string; last_at: string; done: Set<number>; finished_at: string | null };
+    const sessions = new Map<string, S>();
+    for (const log of logs) {
+      const sid = log.session_id as string;
+      let s = sessions.get(sid);
+      if (!s) {
+        if (log.stage !== "started") continue; // only sessions whose start is inside the window
+        s = { id: sid, ip: log.ip_address, script_id: log.script_id || null, started_at: log.created_at, last_at: log.created_at, done: new Set(), finished_at: null };
+        sessions.set(sid, s);
+      }
+      s.last_at = log.created_at;
+      if (log.stage === "step_completed" && typeof log.step_index === "number") s.done.add(log.step_index);
+      if (log.stage === "completed" && !s.finished_at) s.finished_at = log.created_at;
+    }
+
+    const list = Array.from(sessions.values());
+    const enriched = await Promise.all(
+      list.map(async (s) => {
+        const steps = await stepsFor(s.script_id);
+        const total = Math.max(1, steps.length);
+        let reachedIdx = 0; // first step NOT completed = the step the player is on / quit on
+        while (s.done.has(reachedIdx)) reachedIdx++;
+        const finished = Boolean(s.finished_at);
+        const status: "finished" | "in_progress" | "stopped" = finished
+          ? "finished"
+          : now - new Date(s.last_at).getTime() < IN_PROGRESS_MS
+          ? "in_progress"
+          : "stopped";
+        return {
+          ...s,
+          total,
+          stepIdx: finished ? total : Math.min(reachedIdx, total - 1),
+          stepsDone: finished ? total : Math.min(reachedIdx, total),
+          status,
+          title: finished ? null : steps[Math.min(reachedIdx, total - 1)]?.title || `Step ${Math.min(reachedIdx, total - 1) + 1}`,
+        };
+      })
+    );
+
+    // Collapse sessions into PLAYERS (same IP + script). Reloading the claim page or coming back later starts a
+    // new session; counting each abandoned one as a drop-off made step 1 look far worse than it is.
+    // A player is represented by their furthest session (finished > most steps > most recent).
+    type E = (typeof enriched)[number];
+    const byPlayer = new Map<string, E[]>();
+    for (const e of enriched) {
+      const k = `${e.ip}|${e.script_id || "all"}`;
+      const arr = byPlayer.get(k);
+      if (arr) arr.push(e);
+      else byPlayer.set(k, [e]);
+    }
+    const rank = (e: E) => (e.status === "finished" ? 1e6 : 0) + e.stepsDone * 1e3;
+    const players = Array.from(byPlayer.values()).map((sess) => {
+      const best = sess.reduce((b, e) => (rank(e) > rank(b) || (rank(e) === rank(b) && e.last_at > b.last_at) ? e : b));
+      const firstStart = sess.reduce((m, e) => (e.started_at < m ? e.started_at : m), best.started_at);
+      const lastAt = sess.reduce((m, e) => {
+        const t = e.finished_at || e.last_at;
+        return t > m ? t : m;
+      }, best.last_at);
+      // still active on any visit → in progress (unless they already finished)
+      const status: E["status"] =
+        best.status === "finished" ? "finished" : sess.some((e) => e.status === "in_progress") ? "in_progress" : "stopped";
+      return { ...best, status, first_started_at: firstStart, last_activity: lastAt, attempts: sess.length };
+    });
+
+    // Funnel: only meaningful within one checkpoint set, so only when a single script is selected
+    const funnelSteps = scope ? await stepsFor(scope.id) : [];
+    const maxSteps = scope ? Math.max(1, funnelSteps.length) : 0; // no cross-script funnel (step 1 of A ≠ step 1 of B)
+    const funnel = Array.from({ length: maxSteps }, (_, i) => {
+      const inScope = players.filter((e) => i < e.total);
+      return {
+        step: i,
+        title: scope ? funnelSteps[i]?.title || `Step ${i + 1}` : `Step ${i + 1}`,
+        is_workink: Boolean(funnelSteps[i] && (Number(funnelSteps[i].duration_seconds) === 0 || /work\.ink|workink\.net/.test(funnelSteps[i].url || ""))),
+        reached: inScope.filter((e) => e.stepsDone >= i).length,
+        completed: inScope.filter((e) => e.stepsDone > i).length,
+        stopped_here: inScope.filter((e) => e.status === "stopped" && e.stepIdx === i).length,
+        in_progress_here: inScope.filter((e) => e.status === "in_progress" && e.stepIdx === i).length,
+      };
+    });
+
+    const finishedList = players.filter((e) => e.status === "finished");
+    const durations = finishedList
+      .map((e) => (new Date(e.finished_at!).getTime() - new Date(e.started_at).getTime()) / 60000)
+      .filter((m) => m >= 0)
+      .sort((a, b) => a - b);
+    const median = durations.length ? durations[Math.floor(durations.length / 2)] : null;
+    const worst = funnel.reduce<(typeof funnel)[number] | null>((w, f) => (f.stopped_here > (w?.stopped_here || 0) ? f : w), null);
+
+    // Daily trend (UTC), at most the last 30 days of the window
+    const days = Math.min(rangeDays > 0 ? rangeDays : 30, 30);
+    const daily: { day: string; started: number; finished: number }[] = [];
+    for (let d = days - 1; d >= 0; d--) {
+      const day = new Date(now - d * 86400 * 1000).toISOString().slice(0, 10);
+      daily.push({
+        day,
+        started: players.filter((e) => e.first_started_at.slice(0, 10) === day).length,
+        finished: finishedList.filter((e) => (e.finished_at || "").slice(0, 10) === day).length,
+      });
+    }
+
+    return {
+      scope: scope ? { id: scope.id, name: scope.name } : null,
+      range_days: rangeDays,
+      summary: {
+        visitors: players.length,
+        sessions: enriched.length,
+        unique_visitors: new Set(enriched.map((e) => e.ip)).size,
+        finished: finishedList.length,
+        in_progress: players.filter((e) => e.status === "in_progress").length,
+        stopped: players.filter((e) => e.status === "stopped").length,
+        completion_rate: players.length ? Math.round((finishedList.length / players.length) * 100) : 0,
+        keys_claimed: keysClaimed,
+        bypass_attempts: bypassCount,
+        median_minutes_to_finish: median === null ? null : Math.round(median * 10) / 10,
+        biggest_drop: worst && worst.stopped_here > 0 ? { step: worst.step, title: worst.title, count: worst.stopped_here } : null,
+      },
+      funnel,
+      daily,
+      recent: players
+        .sort((a, b) => b.last_activity.localeCompare(a.last_activity))
+        .slice(0, 100)
+        .map((e) => ({
+          session: e.id.slice(0, 8),
+          ip: e.ip,
+          script: nameOf(e.script_id),
+          started_at: e.first_started_at,
+          last_at: e.last_activity,
+          steps_done: e.stepsDone,
+          total: e.total,
+          status: e.status,
+          step_title: e.title,
+          attempts: e.attempts,
+        })),
+    };
   },
 
   async getCheckpointAnalytics(scriptId?: string) {
