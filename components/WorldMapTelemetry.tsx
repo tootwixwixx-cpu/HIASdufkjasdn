@@ -20,6 +20,11 @@ import {
   Info,
 } from "lucide-react";
 import type { ExecutionLog } from "@/lib/store";
+import { geoNaturalEarth1, geoPath, geoGraticule10, geoCentroid } from "d3-geo";
+import { feature } from "topojson-client";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
+import isoCountries from "i18n-iso-countries";
+import worldTopo from "world-atlas/countries-110m.json";
 
 export interface ActivePlayerSession {
   id: string;
@@ -48,33 +53,91 @@ interface GeoPoint {
   country: string;
   code: string;
   flag: string;
+  /** ISO 3166-1 numeric id (matches the world-atlas country features), if known */
+  numericId: string | null;
+  /** true = real coordinates from the edge network; false = country centre (only the country is known) */
+  precise: boolean;
 }
 
-// Major global gaming hubs catalog for deterministic IP geocoding fallback
-const GAMING_GEO_HUBS: Record<string, GeoPoint> = {
-  US_NY: { lat: 40.7128, lng: -74.006, city: "New York", country: "United States", code: "US", flag: "🇺🇸" },
-  US_CA: { lat: 34.0522, lng: -118.2437, city: "Los Angeles", country: "United States", code: "US", flag: "🇺🇸" },
-  US_TX: { lat: 32.7767, lng: -96.797, city: "Dallas", country: "United States", code: "US", flag: "🇺🇸" },
-  US_FL: { lat: 25.7617, lng: -80.1918, city: "Miami", country: "United States", code: "US", flag: "🇺🇸" },
-  US_IL: { lat: 41.8781, lng: -87.6298, city: "Chicago", country: "United States", code: "US", flag: "🇺🇸" },
-  CA: { lat: 43.6532, lng: -79.3832, city: "Toronto", country: "Canada", code: "CA", flag: "🇨🇦" },
-  GB: { lat: 51.5074, lng: -0.1278, city: "London", country: "United Kingdom", code: "GB", flag: "🇬🇧" },
-  DE: { lat: 50.1109, lng: 8.6821, city: "Frankfurt", country: "Germany", code: "DE", flag: "🇩🇪" },
-  FR: { lat: 48.8566, lng: 2.3522, city: "Paris", country: "France", code: "FR", flag: "🇫🇷" },
-  NL: { lat: 52.3676, lng: 4.9041, city: "Amsterdam", country: "Netherlands", code: "NL", flag: "🇳🇱" },
-  SE: { lat: 59.3293, lng: 18.0686, city: "Stockholm", country: "Sweden", code: "SE", flag: "🇸🇪" },
-  PL: { lat: 52.2297, lng: 21.0122, city: "Warsaw", country: "Poland", code: "PL", flag: "🇵🇱" },
-  BR: { lat: -23.5505, lng: -46.6333, city: "São Paulo", country: "Brazil", code: "BR", flag: "🇧🇷" },
-  AR: { lat: -34.6037, lng: -58.3816, city: "Buenos Aires", country: "Argentina", code: "AR", flag: "🇦🇷" },
-  JP: { lat: 35.6762, lng: 139.6503, city: "Tokyo", country: "Japan", code: "JP", flag: "🇯🇵" },
-  KR: { lat: 37.5665, lng: 126.978, city: "Seoul", country: "South Korea", code: "KR", flag: "🇰🇷" },
-  SG: { lat: 1.3521, lng: 103.8198, city: "Singapore", country: "Singapore", code: "SG", flag: "🇸🇬" },
-  PH: { lat: 14.5995, lng: 120.9842, city: "Manila", country: "Philippines", code: "PH", flag: "🇵🇭" },
-  AU: { lat: -33.8688, lng: 151.2093, city: "Sydney", country: "Australia", code: "AU", flag: "🇦🇺" },
-  AE: { lat: 25.2048, lng: 55.2708, city: "Dubai", country: "United Arab Emirates", code: "AE", flag: "🇦🇪" },
+// ---------------------------------------------------------------------------------------------
+// Real world geography: Natural Earth 1:110m country boundaries (world-atlas), projected with the
+// Natural Earth projection. Computed once at module load.
+// ---------------------------------------------------------------------------------------------
+const MAP_W = 1000;
+const MAP_H = 500;
+const projection = geoNaturalEarth1().fitExtent(
+  [
+    [6, 6],
+    [MAP_W - 6, MAP_H - 6],
+  ],
+  { type: "Sphere" }
+);
+const pathGen = geoPath(projection);
+
+type CountryFeature = Feature<Geometry, { name?: string }>;
+const COUNTRY_FEATURES: CountryFeature[] = (
+  feature(worldTopo as any, (worldTopo as any).objects.countries) as unknown as FeatureCollection<Geometry, { name?: string }>
+).features;
+
+const normalizeNumericId = (id: unknown): string | null => {
+  const n = Number(id);
+  return Number.isFinite(n) ? String(n) : null;
 };
 
-const HUBS_LIST = Object.values(GAMING_GEO_HUBS);
+const COUNTRY_PATHS = COUNTRY_FEATURES.map((f, i) => ({
+  key: `${normalizeNumericId(f.id) ?? "x"}-${i}`,
+  id: normalizeNumericId(f.id),
+  name: f.properties?.name || "",
+  d: pathGen(f) || "",
+}));
+const SPHERE_PATH = pathGen({ type: "Sphere" }) || "";
+const GRATICULE_PATH = pathGen(geoGraticule10()) || "";
+const COUNTRY_CENTROIDS = new Map<string, [number, number]>();
+for (const f of COUNTRY_FEATURES) {
+  const id = normalizeNumericId(f.id);
+  if (id) COUNTRY_CENTROIDS.set(id, geoCentroid(f) as [number, number]);
+}
+
+const regionNames = (() => {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" });
+  } catch {
+    return null;
+  }
+})();
+
+function countryNameFor(code: string): string {
+  try {
+    return regionNames?.of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+// Viewport for a lon/lat box, computed by projecting points along its edges.
+function regionBox(lonMin: number, lonMax: number, latMin: number, latMax: number) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i <= 24; i++) {
+    const lo = lonMin + ((lonMax - lonMin) * i) / 24;
+    const la = latMin + ((latMax - latMin) * i) / 24;
+    for (const pt of [[lo, latMin], [lo, latMax], [lonMin, la], [lonMax, la]] as [number, number][]) {
+      const p = projection(pt);
+      if (!p) continue;
+      x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]);
+      x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]);
+    }
+  }
+  const pad = 10;
+  return { x: x0 - pad, y: y0 - pad, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2 };
+}
+
+const REGION_BOXES = {
+  global: { x: 0, y: 0, w: MAP_W, h: MAP_H },
+  na: regionBox(-170, -30, -58, 75), // the Americas
+  sa: regionBox(-92, -30, -58, 15),
+  eu: regionBox(-25, 45, 34, 71),
+  asia: regionBox(25, 150, -12, 60),
+} as const;
 
 function getCountryFlag(code?: string | null): string {
   if (!code || code.length !== 2) return "🌐";
@@ -96,64 +159,41 @@ function resolvePlayerGeo(
     roblox_username?: string | null;
     id?: string;
   }
-): GeoPoint {
-  // If real edge geo coordinates were provided by Vercel / Cloudflare headers
+): GeoPoint | null {
+  // Only real data is plotted. The old version invented a location by hashing the player's IP onto
+  // one of 20 hard-coded "gaming hubs" with random jitter — that's gone.
+  const rawCode = (session?.country || "").trim().toUpperCase();
+  const code = /^[A-Z]{2}$/.test(rawCode) ? rawCode : "";
+  const numericRaw = code ? isoCountries.alpha2ToNumeric(code) : undefined;
+  const numericId = numericRaw ? normalizeNumericId(numericRaw) : null;
+  const country = code ? countryNameFor(code) : "Unknown country";
+  const flag = getCountryFlag(code || null);
+
+  const lat = session?.latitude;
+  const lng = session?.longitude;
+  // 1. Real coordinates from the edge network (Vercel / Cloudflare geo headers)
   if (
-    session?.latitude !== undefined &&
-    session?.latitude !== null &&
-    session?.longitude !== undefined &&
-    session?.longitude !== null
+    typeof lat === "number" && typeof lng === "number" &&
+    Number.isFinite(lat) && Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 && Math.abs(lng) <= 180 &&
+    !(lat === 0 && lng === 0)
   ) {
-    const code = session.country || "US";
-    return {
-      lat: session.latitude,
-      lng: session.longitude,
-      city: session.city || "Client Location",
-      country: session.country || "Unknown Country",
-      code,
-      flag: getCountryFlag(code),
-    };
+    return { lat, lng, city: session?.city || "Unknown city", country, code, flag, numericId, precise: true };
   }
 
-  // If real country code was provided, snap to nearest known regional gaming hub
-  if (session?.country && GAMING_GEO_HUBS[session.country]) {
-    const hub = GAMING_GEO_HUBS[session.country];
-    return {
-      ...hub,
-      city: session.city || hub.city,
-    };
+  // 2. Only the country is known: use that country's geographic centre
+  if (numericId && COUNTRY_CENTROIDS.has(numericId)) {
+    const [cLng, cLat] = COUNTRY_CENTROIDS.get(numericId)!;
+    return { lat: cLat, lng: cLng, city: session?.city || "City unavailable", country, code, flag, numericId, precise: false };
   }
 
-  // Deterministic IP hash fallback
-  const str = (session?.ip_address || session?.roblox_user_id || session?.roblox_username || session?.id || "127.0.0.1").trim();
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  const index = Math.abs(hash) % HUBS_LIST.length;
-  const base = HUBS_LIST[index];
-
-  const jitterLat = (((Math.abs(hash * 31) % 100) - 50) / 100) * 1.5;
-  const jitterLng = (((Math.abs(hash * 17) % 100) - 50) / 100) * 1.5;
-
-  return {
-    ...base,
-    lat: base.lat + jitterLat,
-    lng: base.lng + jitterLng,
-  };
+  // 3. No location data at all: don't make one up
+  return null;
 }
 
-// High-precision Equirectangular map projection
-function projectToSvg(lat: number, lng: number, width = 1000, height = 500) {
-  // Longitude: -180 to 180 -> 0 to width
-  const x = ((lng + 180) / 360) * width;
-  // Latitude: 90 to -90 -> 0 to height
-  const y = ((90 - lat) / 180) * height;
-  return {
-    x: Math.max(12, Math.min(width - 12, x)),
-    y: Math.max(12, Math.min(height - 12, y)),
-  };
+function projectToSvg(lat: number, lng: number): { x: number; y: number } | null {
+  const p = projection([lng, lat]);
+  return p ? { x: p[0], y: p[1] } : null;
 }
 
 export default function WorldMapTelemetry({
@@ -180,14 +220,17 @@ export default function WorldMapTelemetry({
     isOnline: boolean;
     pingSec?: number;
     coords: { x: number; y: number };
+    precise?: boolean;
+    numericId?: string | null;
   } | null>(null);
 
   const [filterMode, setFilterMode] = useState<"active" | "all">("active");
   const [regionZoom, setRegionZoom] = useState<"global" | "na" | "eu" | "asia" | "sa">("global");
 
   // Derive plotted players
-  const plottedPlayers = useMemo(() => {
+  const { list: plottedPlayers, unlocated: unlocatedCount } = useMemo(() => {
     const list: typeof selectedPlayer[] = [];
+    let unlocated = 0;
 
     // 1. First add all currently online/active sessions
     sessions.forEach((s) => {
@@ -195,7 +238,11 @@ export default function WorldMapTelemetry({
       if (filterMode === "active" && !isOnline) return;
 
       const geo = resolvePlayerGeo(s);
-      const coords = projectToSvg(geo.lat, geo.lng);
+      const coords = geo ? projectToSvg(geo.lat, geo.lng) : null;
+      if (!geo || !coords) {
+        unlocated += 1;
+        return;
+      }
 
       const m = Math.floor((s.duration_seconds || 0) / 60);
       const sec = (s.duration_seconds || 0) % 60;
@@ -218,6 +265,8 @@ export default function WorldMapTelemetry({
         isOnline: Boolean(isOnline),
         pingSec: s.last_ping_sec ?? 1,
         coords,
+        precise: geo.precise,
+        numericId: geo.numericId,
       });
     });
 
@@ -229,7 +278,11 @@ export default function WorldMapTelemetry({
         seenIps.add(log.ip_address);
 
         const geo = resolvePlayerGeo(log);
-        const coords = projectToSvg(geo.lat, geo.lng);
+        const coords = geo ? projectToSvg(geo.lat, geo.lng) : null;
+        if (!geo || !coords) {
+          unlocated += 1;
+          return;
+        }
 
         list.push({
           id: log.id,
@@ -248,12 +301,20 @@ export default function WorldMapTelemetry({
           isOnline: false,
           pingSec: 0,
           coords,
+          precise: geo.precise,
+          numericId: geo.numericId,
         });
       });
     }
 
-    return list.filter(Boolean) as NonNullable<typeof selectedPlayer>[];
+    return { list: list.filter(Boolean) as NonNullable<typeof selectedPlayer>[], unlocated };
   }, [sessions, logs, filterMode]);
+
+  // Countries that currently have plotted players get highlighted on the map.
+  const activeCountryIds = useMemo(
+    () => new Set(plottedPlayers.map((p) => p.numericId).filter(Boolean) as string[]),
+    [plottedPlayers]
+  );
 
   // Aggregate country statistics
   const countryStats = useMemo(() => {
@@ -270,20 +331,11 @@ export default function WorldMapTelemetry({
   const activeCount = sessions.filter((s) => s.is_online ?? (s.status === "active")).length;
 
   // ViewBox dynamic calculation based on region zoom
-  const viewBox = useMemo(() => {
-    switch (regionZoom) {
-      case "na":
-        return "80 40 320 220";
-      case "sa":
-        return "200 240 220 240";
-      case "eu":
-        return "420 50 240 180";
-      case "asia":
-        return "580 60 380 280";
-      default:
-        return "0 0 1000 500";
-    }
-  }, [regionZoom]);
+  // Viewports are computed from real lon/lat boxes projected onto the map.
+  const box = REGION_BOXES[regionZoom] || REGION_BOXES.global;
+  const viewBox = `${box.x} ${box.y} ${box.w} ${box.h}`;
+  // Keep markers and strokes the same on-screen size when zoomed in.
+  const k = box.w / MAP_W;
 
   return (
     <div className="bg-surface border border-line rounded-lg overflow-hidden relative">
@@ -386,23 +438,13 @@ export default function WorldMapTelemetry({
 
       {/* REAL Vector World Map Canvas */}
       <div className="relative w-full aspect-[2/1] min-h-[340px] max-h-[560px] bg-[#07080D] overflow-hidden select-none">
-        {/* Geographic Grid Lines (Equator, Meridians, Latitudes) */}
-        <div className="absolute inset-0 pointer-events-none opacity-20">
-          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500">
-            <line x1="0" y1="250" x2="1000" y2="250" stroke="#00f0ff" strokeWidth="0.8" strokeDasharray="4 4" />
-            <line x1="0" y1="125" x2="1000" y2="125" stroke="#38bdf8" strokeWidth="0.4" strokeDasharray="2 4" />
-            <line x1="0" y1="375" x2="1000" y2="375" stroke="#38bdf8" strokeWidth="0.4" strokeDasharray="2 4" />
-            <line x1="500" y1="0" x2="500" y2="500" stroke="#00f0ff" strokeWidth="0.8" strokeDasharray="4 4" />
-            <line x1="250" y1="0" x2="250" y2="500" stroke="#38bdf8" strokeWidth="0.4" strokeDasharray="2 4" />
-            <line x1="750" y1="0" x2="750" y2="500" stroke="#38bdf8" strokeWidth="0.4" strokeDasharray="2 4" />
-          </svg>
-        </div>
-
-        {/* Real Detailed Geographic World Map SVG */}
+        {/* World map: Natural Earth 1:110m country boundaries, Natural Earth projection */}
         <svg
           viewBox={viewBox}
-          className="w-full h-full transition-all duration-700 ease-out"
-          style={{ filter: "drop-shadow(0 0 16px rgba(0, 240, 255, 0.05))" }}
+          preserveAspectRatio="xMidYMid meet"
+          className="w-full h-full"
+          role="img"
+          aria-label="World map of player locations"
         >
           {/* DEFINITIONS FOR GLOW EFFECTS */}
           <defs>
@@ -418,88 +460,23 @@ export default function WorldMapTelemetry({
             </radialGradient>
           </defs>
 
-          {/* REAL GEOGRAPHIC CONTINENTS & COASTLINES (Detailed Natural Earth Equirectangular Vectors) */}
-          <g fill="#121624" stroke="#1E2638" strokeWidth="0.8" strokeLinejoin="round">
-            {/* North America (Alaska, Canada, Greenland, Contiguous US, Mexico, Central America) */}
-            <path
-              d="M 68 88 L 84 82 L 102 75 L 125 78 L 138 65 L 160 62 L 192 68 L 220 54 L 245 60 L 268 78 L 285 70 L 305 82 L 315 110 L 300 135 L 292 145 L 282 140 L 275 152 L 262 165 L 245 168 L 235 185 L 225 195 L 210 215 L 205 240 L 195 245 L 180 235 L 175 220 L 165 210 L 150 205 L 138 185 L 125 182 L 115 165 L 100 152 L 85 130 L 72 105 Z"
-            />
-            {/* Greenland */}
-            <path
-              d="M 330 42 L 365 38 L 395 48 L 410 75 L 395 105 L 368 115 L 340 98 L 332 72 Z"
-            />
-            {/* Caribbean & Cuba */}
-            <path
-              d="M 235 212 L 260 215 L 272 225 L 250 226 Z M 275 225 L 295 228 L 290 235 Z"
-            />
-            {/* South America (Colombia, Venezuela, Brazil, Argentina, Chile, Peru) */}
-            <path
-              d="M 230 252 L 255 245 L 285 250 L 315 265 L 340 285 L 358 315 L 350 350 L 330 385 L 310 425 L 290 472 L 278 475 L 270 450 L 268 410 L 260 370 L 248 335 L 235 305 L 225 275 Z"
-            />
-            {/* Europe (British Isles, Scandinavia, Western Europe, Mediterranean, Balkans) */}
-            {/* Great Britain & Ireland */}
-            <path
-              d="M 458 108 L 472 98 L 476 115 L 468 132 L 455 125 Z M 445 115 L 452 110 L 450 125 L 442 122 Z"
-            />
-            {/* Scandinavia */}
-            <path
-              d="M 495 65 L 522 55 L 542 62 L 555 85 L 538 112 L 512 115 L 498 95 Z"
-            />
-            {/* Western & Central Europe */}
-            <path
-              d="M 462 135 L 485 128 L 515 130 L 545 142 L 555 165 L 535 182 L 505 185 L 478 180 L 460 162 Z"
-            />
-            {/* Iberian Peninsula (Spain & Portugal) */}
-            <path
-              d="M 445 170 L 475 168 L 472 195 L 442 198 Z"
-            />
-            {/* Italy */}
-            <path
-              d="M 505 178 L 522 185 L 528 208 L 518 212 L 508 195 Z"
-            />
-            {/* Africa (North Africa, Sahara, West Africa, Central, Horn, Southern, Madagascar) */}
-            <path
-              d="M 445 205 L 495 200 L 545 205 L 585 225 L 595 255 L 575 295 L 555 345 L 535 385 L 515 405 L 495 385 L 485 345 L 465 295 L 440 255 L 435 225 Z"
-            />
-            {/* Madagascar */}
-            <path
-              d="M 595 352 L 608 348 L 615 385 L 602 395 Z"
-            />
-            {/* Eurasia / Asia (Middle East, Russia/Siberia, India, China, SE Asia) */}
-            <path
-              d="M 552 130 L 595 115 L 650 95 L 720 85 L 780 82 L 845 88 L 885 105 L 870 135 L 835 155 L 805 185 L 775 220 L 745 240 L 715 225 L 685 210 L 650 205 L 615 215 L 585 210 L 565 175 Z"
-            />
-            {/* Arabian Peninsula (Saudi Arabia, UAE, Oman) */}
-            <path
-              d="M 588 222 L 625 218 L 642 245 L 625 275 L 595 265 Z"
-            />
-            {/* Indian Subcontinent */}
-            <path
-              d="M 675 220 L 715 222 L 735 255 L 715 305 L 695 275 L 678 245 Z"
-            />
-            {/* Southeast Asia (Indochina, Thailand, Vietnam) */}
-            <path
-              d="M 755 235 L 785 238 L 795 275 L 770 295 L 755 265 Z"
-            />
-            {/* Japan Archipelago */}
-            <path
-              d="M 865 142 L 882 148 L 878 178 L 858 175 Z M 850 178 L 865 182 L 855 195 Z"
-            />
-            {/* Indonesia, Philippines & Pacific Islands */}
-            <path
-              d="M 770 315 L 805 318 L 835 325 L 815 338 L 775 330 Z M 800 245 L 812 250 L 815 278 L 798 272 Z"
-            />
-            {/* Australia & Tasmania */}
-            <path
-              d="M 795 365 L 845 350 L 892 368 L 912 405 L 895 445 L 845 455 L 805 440 L 785 405 Z"
-            />
-            <path
-              d="M 865 465 L 880 462 L 878 478 L 865 475 Z"
-            />
-            {/* New Zealand */}
-            <path
-              d="M 935 442 L 950 435 L 945 468 Z M 925 468 L 938 465 L 932 492 Z"
-            />
+          {/* Globe outline + 10° graticule */}
+          <path d={SPHERE_PATH} fill="#0A0D16" stroke="#1E2638" strokeWidth={0.8 * k} />
+          <path d={GRATICULE_PATH} fill="none" stroke="#38bdf8" strokeOpacity={0.08} strokeWidth={0.5 * k} />
+
+          {/* Countries (highlighted when they have plotted players) */}
+          <g strokeLinejoin="round">
+            {COUNTRY_PATHS.map((c) => (
+              <path
+                key={c.key}
+                d={c.d}
+                fill={c.id && activeCountryIds.has(c.id) ? "#1C2B47" : "#141A29"}
+                stroke={c.id && activeCountryIds.has(c.id) ? "#2E4A78" : "#232C42"}
+                strokeWidth={0.5 * k}
+              >
+                <title>{c.name}</title>
+              </path>
+            ))}
           </g>
 
           {/* ACTIVE TELEMETRY PINGS (Live Players Radar Coordinates) */}
@@ -513,50 +490,67 @@ export default function WorldMapTelemetry({
                 className="cursor-pointer transition-transform duration-300"
                 onClick={() => setSelectedPlayer(isSelected ? null : player)}
               >
-                {/* Expanding Radar Ripple Waves */}
+                <title>
+                  {`${player.username} — ${player.city}, ${player.country}${player.precise ? "" : " (country-level location)"}`}
+                </title>
+
+                {/* Expanding radar ripples. transform-box/origin make the CSS scale animation grow from the
+                    dot itself (SVG's default origin is the map's top-left corner, which made ripples drift). */}
                 {player.isOnline && (
                   <>
                     <circle
                       cx={x}
                       cy={y}
-                      r="16"
+                      r={10 * k}
                       fill="none"
-                      stroke={player.isOnline ? "#10b981" : "#00f0ff"}
-                      strokeWidth="1"
+                      stroke="#10b981"
+                      strokeWidth={1 * k}
                       className="animate-ping opacity-60"
-                      style={{ animationDuration: "2.5s" }}
+                      style={{ animationDuration: "2.5s", transformBox: "fill-box", transformOrigin: "center" }}
                     />
                     <circle
                       cx={x}
                       cy={y}
-                      r="26"
+                      r={16 * k}
                       fill="none"
-                      stroke={player.isOnline ? "#10b981" : "#00f0ff"}
-                      strokeWidth="0.5"
+                      stroke="#10b981"
+                      strokeWidth={0.5 * k}
                       className="animate-ping opacity-30"
-                      style={{ animationDuration: "3.5s" }}
+                      style={{ animationDuration: "3.5s", transformBox: "fill-box", transformOrigin: "center" }}
                     />
                   </>
+                )}
+
+                {/* Approximate (country-centre) locations get a dashed ring so they aren't mistaken for exact ones */}
+                {!player.precise && (
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r={9 * k}
+                    fill="none"
+                    stroke={player.isOnline ? "#34d399" : "#38bdf8"}
+                    strokeOpacity={0.7}
+                    strokeWidth={0.8 * k}
+                    strokeDasharray={`${2 * k} ${2 * k}`}
+                  />
                 )}
 
                 {/* Outer Glow Halo */}
                 <circle
                   cx={x}
                   cy={y}
-                  r={isSelected ? "9" : "6"}
+                  r={(isSelected ? 9 : 6) * k}
                   fill={player.isOnline ? "url(#playerOnlineGlow)" : "url(#playerPingGlow)"}
-                  className="transition-all duration-300"
                 />
 
                 {/* Solid Core Dot */}
                 <circle
                   cx={x}
                   cy={y}
-                  r={isSelected ? "4.5" : "3"}
+                  r={(isSelected ? 4.5 : 3) * k}
                   fill={player.isOnline ? "#34d399" : "#38bdf8"}
                   stroke="#ffffff"
-                  strokeWidth="1"
-                  className="shadow-lg"
+                  strokeWidth={1 * k}
                 />
               </g>
             );
@@ -656,9 +650,18 @@ export default function WorldMapTelemetry({
             <span className="w-2 h-2 rounded-full bg-accent" />
             <span>Authenticated Execution</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full border border-dashed border-fg-muted" />
+            <span>Country-level location</span>
+          </div>
         </div>
         <div className="flex items-center gap-2 text-fg-subtle">
-          <span>Click any glowing ping point on the world map to inspect player telemetry</span>
+          {unlocatedCount > 0 && (
+            <span className="text-fg-muted">
+              {unlocatedCount} {unlocatedCount === 1 ? "player has" : "players have"} no location data (not plotted) ·
+            </span>
+          )}
+          <span>Click a point to inspect player telemetry</span>
         </div>
       </div>
     </div>
