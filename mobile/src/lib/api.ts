@@ -121,7 +121,8 @@ export class ApiService {
   public static async login(username: string, pass: string): Promise<boolean> {
     const res = await this.request("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password: pass }),
+      // client:"mobile" = the server's mobile sign-in path (no 2FA prompt; every login alerts the owner)
+      body: JSON.stringify({ username, password: pass, client: "mobile" }),
     });
 
     if (res.success && res.token) {

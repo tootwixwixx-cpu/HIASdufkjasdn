@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyCredentials, AUTH_COOKIE_NAME, SESSION_HOURS, createAdminSession } from "@/lib/auth";
 import { dbService } from "@/lib/store";
 import { getClientIp } from "@/lib/ip";
-import { isTotpConfigured, verifyTotp } from "@/lib/totp";
+import { verifyTotpWithSecret } from "@/lib/totp";
+import { getActiveTotpSecret } from "@/lib/admin-2fa";
 import { adminAlert } from "@/lib/alerts";
 
 export const runtime = "nodejs";
@@ -41,12 +42,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
     }
 
-    // Optional second factor: enforced whenever ADMIN_TOTP_SECRET is set.
-    if (isTotpConfigured()) {
+    // The mobile app signs in without 2FA (owner's choice). Trade-off: anyone with the password can use
+    // this path, so every mobile login alerts Discord, the session is labelled "mobile", and the whole
+    // path can be switched off with MOBILE_LOGIN_ENABLED=false.
+    const isMobile = body?.client === "mobile";
+    if (isMobile && process.env.MOBILE_LOGIN_ENABLED === "false") {
+      return NextResponse.json({ error: "Mobile app sign-in is disabled." }, { status: 403 });
+    }
+
+    // Second factor for web logins: enrolled from the dashboard (or ADMIN_TOTP_SECRET env override).
+    let totpSecret: string | null = null;
+    if (!isMobile) {
+      try {
+        totpSecret = await getActiveTotpSecret();
+      } catch (e) {
+        console.error("2FA state error:", e);
+        return NextResponse.json({ error: "Two-factor authentication is misconfigured." }, { status: 500 });
+      }
+    }
+    if (totpSecret) {
       if (!totp) {
         return NextResponse.json({ error: "Authentication code required", totp_required: true }, { status: 401 });
       }
-      const step = verifyTotp(totp);
+      const step = verifyTotpWithSecret(totpSecret, totp);
       if (step === null) {
         void dbService.audit("admin.login_failed", { ip, details: { reason: "bad_totp" } });
         return NextResponse.json({ error: "Invalid authentication code", totp_required: true }, { status: 401 });
@@ -60,17 +78,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const ua = (req.headers.get("user-agent") || "").slice(0, 160);
     const { token: sessionToken } = await createAdminSession({
       ip,
-      userAgent: req.headers.get("user-agent") || "",
+      userAgent: (isMobile ? "mobile app | " : "web | ") + ua,
     });
-    void dbService.audit("admin.login", { ip });
-    void adminAlert(
-      "admin_login",
-      "Admin signed in",
-      { IP: ip, Device: (req.headers.get("user-agent") || "").slice(0, 120) },
-      { dedupKey: ip, windowSec: 3600 }
-    );
+    void dbService.audit(isMobile ? "admin.login_mobile" : "admin.login", { ip });
+    if (isMobile) {
+      // Every mobile login (no 2FA on that path), never deduplicated.
+      void adminAlert(
+        "admin_login_mobile",
+        "Admin signed in from the MOBILE APP (no 2FA)",
+        { IP: ip, Device: ua, "If this wasn't you": "Sign out everywhere + change ADMIN_PASSWORD" },
+        { dedupKey: `${ip}:${Date.now()}`, windowSec: 1 }
+      );
+    } else {
+      void adminAlert("admin_login", "Admin signed in", { IP: ip, Device: ua }, { dedupKey: ip, windowSec: 3600 });
+    }
 
     const response = NextResponse.json({
       success: true,

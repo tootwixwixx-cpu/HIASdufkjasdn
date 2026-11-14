@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import type { SystemSettings } from "@/lib/store";
+import TwoFactorCard from "@/components/TwoFactorCard";
 import { Check, Code, Save, ShieldBan, Search } from "lucide-react";
 import {
   Badge,
@@ -271,6 +272,9 @@ export default function SettingsPage() {
           )}
         </CardBody>
       </Card>
+
+      {/* Admin 2FA (Authy) */}
+      <TwoFactorCard />
 
       {/* Anti-VPN */}
       <Card>
