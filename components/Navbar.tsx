@@ -42,6 +42,9 @@ export default function Navbar({ scripts, discordUrl = "https://discord.gg/NdrTc
           <a href="#scripts" className={navLink}>
             Scripts
           </a>
+          <Link href="/status" className={navLink}>
+            Status
+          </Link>
         </nav>
 
         {/* Actions */}

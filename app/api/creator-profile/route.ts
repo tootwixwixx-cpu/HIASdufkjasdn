@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const updated = await dbService.saveCreatorProfile(body);
+    void dbService.audit("settings.creator_profile");
     return NextResponse.json({ success: true, profile: updated });
   } catch (err: unknown) {
     const message = publicError(err, "Error saving creator profile");

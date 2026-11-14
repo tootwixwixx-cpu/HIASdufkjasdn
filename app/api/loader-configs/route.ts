@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     const config = await dbService.saveLoaderConfig(body);
+    void dbService.audit("settings.loader_config", { target: config?.id });
     return NextResponse.json({ success: true, config });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Error saving loader config";

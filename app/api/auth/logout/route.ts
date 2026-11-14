@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     // leaving the token valid for 7 days if it had been copied/leaked).
     await revokeSessionToken(cookieToken);
     await revokeSessionToken(bearer);
+    void dbService.audit("admin.logout", { ip: getClientIp(req) });
   }
 
   const response = NextResponse.json({ success: true, redirect: "/login" });

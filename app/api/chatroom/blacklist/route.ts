@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
     }
 
     const updated = await dbService.addBlacklistWords(wordsToAdd);
+    void dbService.audit("chat.blacklist_add", { details: { count: wordsToAdd.length } });
     return NextResponse.json({ success: true, count: wordsToAdd.length, words: updated });
   } catch (error: any) {
     console.error("Error adding blacklist words:", error);
@@ -65,6 +66,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     await dbService.deleteBlacklistWord(word);
+    void dbService.audit("chat.blacklist_remove");
     const updated = await dbService.getBlacklistWords();
     return NextResponse.json({ success: true, words: updated });
   } catch (error: any) {

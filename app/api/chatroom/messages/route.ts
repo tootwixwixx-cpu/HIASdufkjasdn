@@ -129,6 +129,7 @@ export async function DELETE(req: NextRequest) {
     const all = searchParams.get("all") === "true" || id === "all";
 
     if (all) {
+      void dbService.audit("chat.clear_all");
       await dbService.clearAllChatroomMessages();
       return NextResponse.json({ success: true, message: "Chatroom history cleared successfully." });
     }
@@ -138,6 +139,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     await dbService.deleteChatroomMessage(id);
+    void dbService.audit("chat.delete_message", { target: id });
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error deleting chat message:", error);

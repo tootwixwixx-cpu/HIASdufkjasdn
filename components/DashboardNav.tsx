@@ -16,6 +16,8 @@ import {
   CheckCircle2,
   Menu,
   X,
+  Activity,
+  ScrollText,
 } from "lucide-react";
 import LogoutButton from "@/components/LogoutButton";
 import { Logo, buttonClasses } from "@/components/ui";
@@ -30,6 +32,8 @@ const NAV_ITEMS = [
   { href: "/dashboard/keys", label: "Keys Pool", icon: Key },
   { href: "/dashboard/players", label: "Players & Telemetry", icon: Users },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/dashboard/status", label: "Status Page", icon: Activity },
+  { href: "/dashboard/audit", label: "Audit Log", icon: ScrollText },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

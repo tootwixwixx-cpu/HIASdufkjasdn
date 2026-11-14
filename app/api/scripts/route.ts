@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
     });
 
     await dbService.saveProtectedPayload(cleanSlug, obfResult.output, stats);
+    void dbService.audit(body.id ? "scripts.update" : "scripts.create", { target: script.id, details: { slug: cleanSlug, preset: vmPreset } });
 
     return NextResponse.json({ success: true, script, stats });
   } catch (err: unknown) {
@@ -237,6 +238,7 @@ export async function PATCH(req: NextRequest) {
       vm_preset: body.preset || existing.vm_preset || "balanced",
     });
 
+    void dbService.audit("scripts.update", { target: updatedScript.id, details: { slug: updatedScript.slug } });
     return NextResponse.json({
       success: true,
       script: updatedScript,

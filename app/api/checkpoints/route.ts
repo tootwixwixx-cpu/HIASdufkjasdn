@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
       order: orderNum,
     });
 
+    void dbService.audit("settings.checkpoint_save", { target: saved.id, details: { title: saved.title } });
     return NextResponse.json({ success: true, checkpoint: saved });
   } catch (err: unknown) {
     const message = publicError(err, "Error saving checkpoint");
@@ -98,6 +99,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const deleted = await dbService.deleteCheckpoint(id);
+    void dbService.audit("settings.checkpoint_delete", { target: id });
     return NextResponse.json({ success: deleted });
   } catch (err: unknown) {
     const message = publicError(err, "Error deleting checkpoint");

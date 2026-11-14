@@ -134,6 +134,45 @@ export interface KeyRecord {
   last_seen_at?: string | null;
 }
 
+export interface AuditRow {
+  id: number;
+  actor: string;
+  action: string;
+  target: string | null;
+  ip_address: string | null;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export type ComponentStatus = "operational" | "degraded" | "partial_outage" | "major_outage" | "maintenance";
+export interface StatusComponent {
+  id: string;
+  name: string;
+  kind: "website" | "script" | "service";
+  script_id: string | null;
+  status: ComponentStatus;
+  message: string | null;
+  sort_order: number;
+  updated_at: string;
+  effective_status: ComponentStatus;
+}
+export interface StatusIncident {
+  id: string;
+  title: string;
+  body: string | null;
+  severity: "minor" | "major" | "critical" | "maintenance";
+  state: "investigating" | "identified" | "monitoring" | "resolved";
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+export interface StatusPageData {
+  components: StatusComponent[];
+  incidents: StatusIncident[];
+  overall: string;
+  unavailable: boolean;
+}
+
 /** In-game device fingerprint produced by the loader: 16 hex chars + "_" + up to 40 printable chars. */
 export const HWID_RE = /^[a-f0-9]{16}_[!-~]{1,40}$/;
 export const HWID_RESET_COOLDOWN_HOURS = 12;
@@ -1841,6 +1880,129 @@ export const dbService = {
   /** Single-use claim-token consumption. Returns true if this is the first use. */
   async consumeClaimToken(tokenId: string, ttlSeconds: number = 900): Promise<boolean> {
     return this.consumeNonce("claim:" + tokenId, ttlSeconds);
+  },
+
+  // --- Audit log viewer ---
+
+  async getAuditLog(opts: { category?: string; from?: string; to?: string; beforeId?: number; limit?: number }): Promise<AuditRow[]> {
+    if (!isSupabaseConfigured || !supabase) return [];
+    let q = supabase
+      .from("audit_log")
+      .select("id, actor, action, target, ip_address, details, created_at")
+      .order("id", { ascending: false })
+      .limit(Math.min(Math.max(opts.limit || 100, 1), 1000));
+    if (opts.category && /^[a-z0-9_]{1,32}$/.test(opts.category)) q = q.like("action", `${opts.category}.%`);
+    if (opts.from && !isNaN(Date.parse(opts.from))) q = q.gte("created_at", new Date(opts.from).toISOString());
+    if (opts.to && !isNaN(Date.parse(opts.to))) q = q.lte("created_at", new Date(opts.to).toISOString());
+    if (opts.beforeId && Number.isInteger(opts.beforeId)) q = q.lt("id", opts.beforeId);
+    const { data, error } = await q;
+    if (error) return [];
+    return data as AuditRow[];
+  },
+
+  // --- Status page ---
+
+  async getStatusPage(): Promise<StatusPageData> {
+    const empty: StatusPageData = { components: [], incidents: [], overall: "operational", unavailable: true };
+    if (!isSupabaseConfigured || !supabase) return empty;
+    const [compsRes, scripts] = await Promise.all([
+      supabase.from("status_components").select("*").order("sort_order").order("name"),
+      this.getScriptsLite(),
+    ]);
+    if (compsRes.error) return empty;
+    let comps = (compsRes.data || []) as StatusComponent[];
+
+    // Make sure the website and every active script have a component (created on first view).
+    const missing: Partial<StatusComponent>[] = [];
+    if (!comps.some((c) => c.kind === "website")) missing.push({ name: "Website & key system", kind: "website", sort_order: 0 });
+    for (const s of scripts.filter((x) => x.is_active !== false)) {
+      if (!comps.some((c) => c.script_id === s.id)) missing.push({ name: s.name, kind: "script", script_id: s.id, sort_order: 10 });
+    }
+    if (missing.length) {
+      await supabase.from("status_components").upsert(missing, { onConflict: "script_id", ignoreDuplicates: true });
+      const again = await supabase.from("status_components").select("*").order("sort_order").order("name");
+      comps = (again.data || comps) as StatusComponent[];
+    }
+
+    const byScript = new Map(scripts.map((s) => [s.id, s]));
+    const visible = comps
+      .filter((c) => c.kind !== "script" || (c.script_id && byScript.get(c.script_id)?.is_active !== false))
+      .map((c) => {
+        const sc = c.script_id ? byScript.get(c.script_id) : undefined;
+        // A script in maintenance mode shows as Maintenance unless you set something more severe.
+        const effective = sc?.is_maintenance && c.status === "operational" ? "maintenance" : c.status;
+        return {
+          ...c,
+          name: sc ? sc.name : c.name,
+          effective_status: effective,
+          message: c.message || (sc?.is_maintenance && effective === "maintenance" ? sc.maintenance_message || null : null),
+        };
+      });
+
+    const since = new Date(Date.now() - 14 * 86400 * 1000).toISOString();
+    const { data: inc } = await supabase
+      .from("status_incidents")
+      .select("*")
+      .or(`state.neq.resolved,resolved_at.gte.${since}`)
+      .order("created_at", { ascending: false })
+      .limit(30);
+
+    const rank: Record<string, number> = { operational: 0, maintenance: 1, degraded: 2, partial_outage: 3, major_outage: 4 };
+    let overall = visible.reduce((w, c) => (rank[c.effective_status] > rank[w] ? c.effective_status : w), "operational");
+    for (const i of (inc || []) as StatusIncident[]) {
+      if (i.state === "resolved") continue;
+      const sev = i.severity === "critical" ? "major_outage" : i.severity === "major" ? "partial_outage" : i.severity === "maintenance" ? "maintenance" : "degraded";
+      if (rank[sev] > rank[overall]) overall = sev;
+    }
+    return { components: visible, incidents: (inc || []) as StatusIncident[], overall, unavailable: false };
+  },
+
+  async updateStatusComponent(id: string, patch: { status?: string; message?: string | null; sort_order?: number; name?: string }) {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(id)) throw new Error("Not available");
+    const clean: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (patch.status !== undefined) clean.status = patch.status;
+    if (patch.message !== undefined) clean.message = patch.message ? String(patch.message).slice(0, 500) : null;
+    if (patch.sort_order !== undefined) clean.sort_order = Math.max(-1000, Math.min(1000, Math.floor(patch.sort_order)));
+    if (patch.name !== undefined) clean.name = String(patch.name).slice(0, 80);
+    const { error } = await supabase.from("status_components").update(clean).eq("id", id);
+    if (error) throw new Error(error.message);
+  },
+
+  async createStatusComponent(name: string) {
+    if (!isSupabaseConfigured || !supabase) throw new Error("Not available");
+    const { error } = await supabase.from("status_components").insert({ name: String(name).slice(0, 80), kind: "service", sort_order: 20 });
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteStatusComponent(id: string) {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(id)) throw new Error("Not available");
+    // Website/script components are managed automatically; only custom services can be deleted.
+    const { error } = await supabase.from("status_components").delete().eq("id", id).eq("kind", "service");
+    if (error) throw new Error(error.message);
+  },
+
+  async saveIncident(inc: { id?: string; title: string; body?: string | null; severity: string; state: string }) {
+    if (!isSupabaseConfigured || !supabase) throw new Error("Not available");
+    const now = new Date().toISOString();
+    const row: Record<string, unknown> = {
+      title: String(inc.title).slice(0, 160),
+      body: inc.body ? String(inc.body).slice(0, 4000) : null,
+      severity: inc.severity,
+      state: inc.state,
+      updated_at: now,
+      resolved_at: inc.state === "resolved" ? now : null,
+    };
+    const q = inc.id && UUID_RE.test(inc.id)
+      ? supabase.from("status_incidents").update(row).eq("id", inc.id)
+      : supabase.from("status_incidents").insert(row);
+    const { error } = await q;
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteIncident(id: string) {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(id)) throw new Error("Not available");
+    const { error } = await supabase.from("status_incidents").delete().eq("id", id);
+    if (error) throw new Error(error.message);
   },
 
   // --- HWID licensing ---

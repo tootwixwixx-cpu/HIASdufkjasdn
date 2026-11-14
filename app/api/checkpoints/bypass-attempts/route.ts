@@ -74,6 +74,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action, ip, hwid, reason } = body;
+    if (typeof action === "string" && /^(ban|unban)_(ip|hwid)$|^clear_attempts$/.test(action)) {
+      void dbService.audit(`bans.${action}`, { target: String(ip || hwid || "") || undefined });
+    }
 
     if (action === "ban_ip" && ip) {
       await dbService.banIp(ip, reason || "Manual IP Lockout from Admin Dashboard");

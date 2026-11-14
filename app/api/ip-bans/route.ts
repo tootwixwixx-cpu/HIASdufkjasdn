@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       : "Manual IP ban from Admin Dashboard";
 
     await dbService.banIp(cleanIp, banReason);
+    void dbService.audit("bans.ip_ban", { target: cleanIp, details: { reason: banReason.slice(0, 120) } });
 
     return NextResponse.json({
       success: true,
@@ -71,6 +72,7 @@ export async function DELETE(req: NextRequest) {
 
     const cleanIp = ip.trim();
     await dbService.unbanIp(cleanIp);
+    void dbService.audit("bans.ip_unban", { target: cleanIp });
 
     return NextResponse.json({
       success: true,
