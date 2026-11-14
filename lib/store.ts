@@ -134,6 +134,34 @@ export interface KeyRecord {
   last_seen_at?: string | null;
 }
 
+export const SCRIPT_VERSIONS_KEPT = 10;
+export interface ScriptVersion {
+  id: string;
+  script_id: string;
+  version: number;
+  entry_file: string | null;
+  vm_preset: string | null;
+  obfuscation_stats: Record<string, unknown> | null;
+  size_bytes: number | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface AnalyticsInsights {
+  unavailable: boolean;
+  days: number;
+  daily: { day: string; players: number; executions: number }[];
+  retention: { new_players: number; eligible_d1: number; returned_d1: number; eligible_d7: number; returned_d7: number } | null;
+  executors: { label: string; players: number }[];
+  os: { label: string; players: number }[];
+  countries: { label: string; players: number }[];
+  funnel: { started: number; steps: { step: number; sessions: number }[]; completed: number; claimed: number } | null;
+  keys: {
+    total: number; unclaimed: number; claimed: number; active: number; banned: number;
+    activated: number; used_7d: number; expired: number; hwid_bound: number;
+  } | null;
+}
+
 export interface AuditRow {
   id: number;
   actor: string;
@@ -1880,6 +1908,133 @@ export const dbService = {
   /** Single-use claim-token consumption. Returns true if this is the first use. */
   async consumeClaimToken(tokenId: string, ttlSeconds: number = 900): Promise<boolean> {
     return this.consumeNonce("claim:" + tokenId, ttlSeconds);
+  },
+
+  // --- Script versions (build snapshots in the private "script-builds" Storage bucket) ---
+
+  /**
+   * Snapshots a script's current source + compiled build. Best-effort: never throws, so a storage
+   * hiccup can't block saving a script. Keeps the newest SCRIPT_VERSIONS_KEPT per script.
+   */
+  async snapshotScript(slug: string, note?: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      invalidateScriptCaches();
+      const s = await this.getScriptBySlug(slug);
+      if (!s || !s.id) return;
+      const payload = JSON.stringify({
+        entry_file: s.entry_file,
+        modules: s.modules || {},
+        obfuscated_payload: s.obfuscated_payload || null,
+        vm_preset: s.vm_preset || null,
+        obfuscation_stats: s.obfuscation_stats || null,
+      });
+      const path = `${s.id}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.json`;
+      const up = await supabase.storage
+        .from("script-builds")
+        .upload(path, new Blob([payload], { type: "application/json" }), { contentType: "application/json", upsert: false });
+      if (up.error) {
+        console.error("snapshot upload failed:", up.error.message);
+        return;
+      }
+      const { error } = await supabase.rpc("create_script_version", {
+        p_script_id: s.id,
+        p_storage_path: path,
+        p_entry_file: s.entry_file || null,
+        p_vm_preset: s.vm_preset || null,
+        p_stats: s.obfuscation_stats || null,
+        p_size: Buffer.byteLength(payload),
+        p_note: note ? note.slice(0, 200) : null,
+      });
+      if (error) {
+        await supabase.storage.from("script-builds").remove([path]);
+        return;
+      }
+      const { data: stale } = await supabase.rpc("prune_script_versions", { p_script_id: s.id, p_keep: SCRIPT_VERSIONS_KEPT });
+      const stalePaths = (Array.isArray(stale) ? stale : [])
+        .map((r: unknown) => (typeof r === "string" ? r : r && typeof r === "object" ? Object.values(r as Record<string, string>)[0] : null))
+        .filter((p): p is string => typeof p === "string");
+      if (stalePaths.length) await supabase.storage.from("script-builds").remove(stalePaths);
+    } catch (err) {
+      console.error("snapshotScript error:", err);
+    }
+  },
+
+  async listScriptVersions(scriptId: string): Promise<ScriptVersion[]> {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(scriptId)) return [];
+    const { data, error } = await supabase
+      .from("script_versions")
+      .select("id, script_id, version, entry_file, vm_preset, obfuscation_stats, size_bytes, note, created_at")
+      .eq("script_id", scriptId)
+      .order("version", { ascending: false });
+    return error ? [] : (data as ScriptVersion[]);
+  },
+
+  /** Restores a snapshot onto the live script, then records the restore as a new version. */
+  async restoreScriptVersion(scriptId: string, versionId: string): Promise<{ slug: string; version: number }> {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(scriptId) || !UUID_RE.test(versionId)) throw new Error("Not available");
+    const { data: v, error } = await supabase
+      .from("script_versions")
+      .select("version, storage_path")
+      .eq("id", versionId)
+      .eq("script_id", scriptId)
+      .maybeSingle();
+    if (error || !v) throw new Error("Version not found");
+    const dl = await supabase.storage.from("script-builds").download(v.storage_path);
+    if (dl.error || !dl.data) throw new Error("Could not load that version's files");
+    const snap = JSON.parse(await dl.data.text());
+    const now = new Date().toISOString();
+    const { data: updated, error: upErr } = await supabase
+      .from("scripts")
+      .update({
+        entry_file: snap.entry_file || "main.lua",
+        modules: snap.modules || {},
+        obfuscated_payload: snap.obfuscated_payload,
+        obfuscation_stats: snap.obfuscation_stats,
+        vm_preset: snap.vm_preset || "balanced",
+        is_obfuscated: Boolean(snap.obfuscated_payload),
+        obfuscated_at: now,
+        updated_at: now,
+      })
+      .eq("id", scriptId)
+      .select("slug")
+      .maybeSingle();
+    if (upErr || !updated) throw new Error("Restore failed: " + (upErr?.message || "script not found"));
+    invalidateScriptCaches();
+    await this.snapshotScript(updated.slug, `Restored from v${v.version}`);
+    return { slug: updated.slug, version: v.version };
+  },
+
+  // --- Analytics insights (aggregated in Postgres; see migration 002) ---
+
+  async getInsights(days: number, scriptId?: string | null): Promise<AnalyticsInsights> {
+    const empty: AnalyticsInsights = { unavailable: true, days, daily: [], retention: null, executors: [], os: [], countries: [], funnel: null, keys: null };
+    if (!isSupabaseConfigured || !supabase) return empty;
+    const d = Math.max(1, Math.min(3650, Math.floor(days)));
+    const from = new Date(Date.now() - d * 86400 * 1000).toISOString();
+    const dailyFrom = new Date(Date.now() - Math.min(d, 90) * 86400 * 1000).toISOString(); // line chart: max 90 days
+    const p_script = scriptId && UUID_RE.test(scriptId) ? scriptId : null;
+    const [daily, retention, ex, os, co, funnel, keys] = await Promise.all([
+      supabase.rpc("analytics_daily_active", { p_from: dailyFrom, p_script }),
+      supabase.rpc("analytics_retention", { p_from: from, p_script }),
+      supabase.rpc("analytics_breakdown", { p_from: from, p_script, p_dimension: "executor" }),
+      supabase.rpc("analytics_breakdown", { p_from: from, p_script, p_dimension: "os" }),
+      supabase.rpc("analytics_breakdown", { p_from: from, p_script, p_dimension: "country" }),
+      supabase.rpc("analytics_checkpoint_funnel", { p_from: from, p_script }),
+      supabase.rpc("analytics_key_usage", { p_script }),
+    ]);
+    if (daily.error) return empty; // migration 002 not applied yet
+    return {
+      unavailable: false,
+      days: d,
+      daily: (daily.data || []) as AnalyticsInsights["daily"],
+      retention: (retention.data || null) as AnalyticsInsights["retention"],
+      executors: (ex.data || []) as AnalyticsInsights["executors"],
+      os: (os.data || []) as AnalyticsInsights["os"],
+      countries: (co.data || []) as AnalyticsInsights["countries"],
+      funnel: (funnel.data || null) as AnalyticsInsights["funnel"],
+      keys: (keys.data || null) as AnalyticsInsights["keys"],
+    };
   },
 
   // --- Audit log viewer ---

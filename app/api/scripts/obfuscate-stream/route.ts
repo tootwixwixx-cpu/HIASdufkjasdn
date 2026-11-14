@@ -180,6 +180,8 @@ export async function POST(req: NextRequest) {
       });
 
       await dbService.saveProtectedPayload(cleanSlug, obfResult.output, stats);
+      await dbService.snapshotScript(cleanSlug, body.id ? "Updated" : "Created");
+      void dbService.audit(body.id ? "scripts.update" : "scripts.create", { target: script.id, details: { slug: cleanSlug, preset: vmPreset } });
 
       const host = req.headers.get("host") || "localhost:3000";
       const proto = req.headers.get("x-forwarded-proto") || "http";

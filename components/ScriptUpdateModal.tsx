@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { ScriptRecord } from "@/lib/store";
 import { Modal, Button, Badge, Tabs, TabsList, TabsTrigger } from "@/components/ui";
+import ScriptVersionsPanel from "@/components/ScriptVersionsPanel";
 
 interface Props {
   script: ScriptRecord | null;
@@ -46,7 +47,7 @@ export default function ScriptUpdateModal({
   const [originalMap, setOriginalMap] = useState<Record<string, string>>({});
   const [entryFile, setEntryFile] = useState<string>("");
   const [vmPreset, setVmPreset] = useState<"balanced" | "maximum" | "ultra">("balanced");
-  const [activeTab, setActiveTab] = useState<"upload" | "editor" | "github">("upload");
+  const [activeTab, setActiveTab] = useState<"upload" | "editor" | "github" | "versions">("upload");
   const [githubRepo, setGithubRepo] = useState("");
   const [githubBranch, setGithubBranch] = useState("main");
   const [githubDirectory, setGithubDirectory] = useState("");
@@ -577,7 +578,7 @@ export default function ScriptUpdateModal({
               </label>
 
               {/* Mode tabs */}
-              <Tabs variant="segmented" value={activeTab} onValueChange={(v) => setActiveTab(v as "upload" | "editor" | "github")}>
+              <Tabs variant="segmented" value={activeTab} onValueChange={(v) => setActiveTab(v as "upload" | "editor" | "github" | "versions")}>
                 <TabsList>
                   <TabsTrigger value="upload">
                     <UploadCloud />
@@ -591,9 +592,30 @@ export default function ScriptUpdateModal({
                     <GitBranch />
                     GitHub sync
                   </TabsTrigger>
+                  <TabsTrigger value="versions">
+                    <RotateCcw />
+                    Versions
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
+
+            {/* TAB 4: Version history / rollback */}
+            {activeTab === "versions" && script && (
+              <ScriptVersionsPanel
+                scriptId={script.id}
+                onRestored={async () => {
+                  try {
+                    const res = await fetch("/api/scripts");
+                    const j = await res.json();
+                    const fresh = (j.scripts || []).find((s: ScriptRecord) => s.id === script.id);
+                    if (fresh) onScriptUpdated(fresh);
+                  } catch {
+                    /* list refreshes on next load */
+                  }
+                }}
+              />
+            )}
 
             {/* TAB 1: Upload Replacement File */}
             {activeTab === "upload" && (

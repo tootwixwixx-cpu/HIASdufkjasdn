@@ -361,6 +361,7 @@ export async function syncScriptFromGitHub(
   };
 
   await dbService.saveScript(updatedScript);
+  await dbService.snapshotScript(updatedScript.slug, `GitHub sync ${String(pullResult.commitSha || "").slice(0, 7)}`.trim());
 
   return {
     success: true,

@@ -316,14 +316,16 @@ as $$
   ) from r;
 $$;
 
+-- Distinct players per executor / OS / country over the whole period (not summed per day, which
+-- would count a returning player once per day).
+drop function if exists public.analytics_breakdown(timestamptz, text, text);
 create or replace function public.analytics_breakdown(p_from timestamptz, p_script text, p_dimension text)
-returns table (day date, label text, players integer)
+returns table (label text, players integer)
 language sql stable
 security invoker
 set search_path = ''
 as $$
-  select (e.created_at at time zone 'utc')::date,
-         coalesce(nullif(case p_dimension
+  select coalesce(nullif(case p_dimension
                            when 'executor' then e.executor
                            when 'os'       then e.os
                            when 'country'  then e.country
@@ -333,8 +335,9 @@ as $$
    where e.status = 'success' and e.created_at >= p_from
      and (p_script is null or e.script_id = p_script)
      and p_dimension in ('executor','os','country')
-   group by 1, 2
-   order by 1, 3 desc;
+   group by 1
+   order by 2 desc
+   limit 12;
 $$;
 
 create or replace function public.analytics_checkpoint_funnel(p_from timestamptz, p_script text)

@@ -36,6 +36,7 @@ import {
 import { Badge, Button, Select, Input, Tabs, TabsList, TabsTrigger, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui";
 import type { ExecutionLog, ClientErrorLog } from "@/lib/store";
 import WorldMapTelemetry, { ActivePlayerSession } from "@/components/WorldMapTelemetry";
+import AnalyticsInsights from "@/components/AnalyticsInsights";
 
 function RobloxAvatar({
   userId,
@@ -484,6 +485,8 @@ export default function AnalyticsPage() {
 
       {/* REAL Interactive Global Radar World Map */}
       <WorldMapTelemetry sessions={activeSessions} logs={data?.recentLogs || []} />
+
+      <AnalyticsInsights timeframe={timeframe} scriptId={selectedScript} />
 
       {/* Activity Timeline Bar Chart */}
       {timeline.length > 0 && (

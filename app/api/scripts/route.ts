@@ -119,6 +119,7 @@ export async function POST(req: NextRequest) {
     });
 
     await dbService.saveProtectedPayload(cleanSlug, obfResult.output, stats);
+    await dbService.snapshotScript(cleanSlug, body.id ? "Updated" : "Created");
     void dbService.audit(body.id ? "scripts.update" : "scripts.create", { target: script.id, details: { slug: cleanSlug, preset: vmPreset } });
 
     return NextResponse.json({ success: true, script, stats });
@@ -238,6 +239,9 @@ export async function PATCH(req: NextRequest) {
       vm_preset: body.preset || existing.vm_preset || "balanced",
     });
 
+    if (body.modules || body.file_content || body.action === "obfuscate" || action === "delete_file" || delete_file) {
+      await dbService.snapshotScript(updatedScript.slug, file_path ? `Edited ${String(file_path).slice(0, 80)}` : "Updated");
+    }
     void dbService.audit("scripts.update", { target: updatedScript.id, details: { slug: updatedScript.slug } });
     return NextResponse.json({
       success: true,
