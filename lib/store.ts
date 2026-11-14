@@ -731,7 +731,9 @@ export const dbService = {
     if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase.from("scripts").select("*").order("created_at", { ascending: false });
-        if (data && !error && data.length > 0) {
+        // Trust Supabase even when it returns zero rows — falling back to the per-instance local copy
+        // made deleted scripts reappear.
+        if (data && !error) {
           return data.map((remote) => {
             const loc = local.find((l) => l.id === remote.id || l.slug === remote.slug);
             return {
@@ -768,7 +770,7 @@ export const dbService = {
             .from("scripts")
             .select(SCRIPT_META_COLUMNS)
             .order("created_at", { ascending: false });
-          if (data && !error && data.length > 0) {
+          if (data && !error) {
             result = (data as any[]).map((remote) => {
               const loc = local.find((l) => l.id === remote.id || l.slug === remote.slug);
               return {
@@ -824,10 +826,12 @@ export const dbService = {
       (s) => s.slug.toLowerCase() === normalized || s.name.toLowerCase() === normalized || s.id === clean
     ) || null;
 
+    let remoteAnswered = false;
     if (isSupabaseConfigured && supabase) {
       try {
         // Slugs are always stored lowercase (see saveScript), so an exact match can use the index.
         const { data, error } = await supabase.from("scripts").select("*").eq("slug", normalized).maybeSingle();
+        if (!error) remoteAnswered = true;
         if (data && !error) {
           return {
             ...local,
@@ -870,7 +874,10 @@ export const dbService = {
         console.error("Supabase getScriptBySlug error:", err);
       }
     }
-    return local;
+    // If Supabase answered and the script isn't there, it doesn't exist — never resurrect a deleted
+    // script from a stale per-instance local copy (it would still be served by the loader).
+    // The local copy is only used when Supabase isn't configured or is unreachable.
+    return remoteAnswered ? null : local;
   },
 
   async saveScript(script: Omit<ScriptRecord, "id" | "created_at" | "updated_at"> & { id?: string }): Promise<ScriptRecord> {
@@ -889,12 +896,28 @@ export const dbService = {
       .replace(/[^a-z0-9_-]/g, "-");
 
     const db = readLocalDb();
-    // Validate slug uniqueness against other scripts
-    const slugConflict = db.scripts.find(
-      (s) => s.slug.toLowerCase() === cleanSlug && s.id !== id
-    );
-    if (slugConflict) {
-      throw new Error(`A script with the URL slug '${cleanSlug}' already exists ('${slugConflict.name}'). Please choose a unique slug.`);
+    // Validate slug uniqueness against other scripts.
+    // When Supabase is configured it is the ONLY source of truth: the local JSON store is a
+    // per-serverless-instance memory copy on Vercel, so a script deleted via one instance can
+    // linger in another instance's copy and wrongly block re-adding the same slug.
+    if (isSupabaseConfigured && supabase) {
+      const { data: clash, error: clashErr } = await supabase
+        .from("scripts")
+        .select("id, name")
+        .eq("slug", cleanSlug)
+        .neq("id", id)
+        .limit(1);
+      if (clashErr) throw new Error("Could not verify slug availability. Please try again.");
+      if (clash && clash.length > 0) {
+        throw new Error(`A script with the URL slug '${cleanSlug}' already exists ('${clash[0].name}'). Please choose a unique slug.`);
+      }
+      // Drop any stale local copies of deleted scripts that used this slug.
+      db.scripts = db.scripts.filter((s) => !(s.slug.toLowerCase() === cleanSlug && s.id !== id));
+    } else {
+      const slugConflict = db.scripts.find((s) => s.slug.toLowerCase() === cleanSlug && s.id !== id);
+      if (slugConflict) {
+        throw new Error(`A script with the URL slug '${cleanSlug}' already exists ('${slugConflict.name}'). Please choose a unique slug.`);
+      }
     }
 
     const record: ScriptRecord = {
@@ -955,10 +978,14 @@ export const dbService = {
           const resFallback = await supabase.from("scripts").upsert(fallbackRecord);
           if (resFallback.error) {
             console.error("Supabase fallback upsert script also failed:", resFallback.error.message);
+            // Don't report success for a script that was never stored.
+            invalidateScriptCaches();
+            throw new Error("Saving the script to the database failed: " + resFallback.error.message);
           }
         }
       } catch (err) {
         console.error("Supabase saveScript exception:", err);
+        throw err instanceof Error ? err : new Error("Saving the script to the database failed.");
       }
     }
 
