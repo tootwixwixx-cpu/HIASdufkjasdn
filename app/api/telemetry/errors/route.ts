@@ -1,13 +1,22 @@
 ﻿// app/api/telemetry/errors/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { publicError } from "@/lib/http-errors";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
+import { getClientIp } from "@/lib/ip";
 
 export async function POST(req: NextRequest) {
   try {
+    // Unauthenticated write endpoint: rate-limit per IP and cap field sizes.
+    if (!(await dbService.rateLimit("client-error", getClientIp(req), 20, 60))) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": "60" } });
+    }
     const body = await req.json();
-    const { script_id, error_message, stack_trace, executor, os } = body;
-    const sessionId = body.session_id || body.session_token || null;
+    const { script_id, error_message, stack_trace } = body;
+    const executor = typeof body.executor === "string" ? body.executor.slice(0, 80) : null;
+    const os = typeof body.os === "string" ? body.os.slice(0, 80) : null;
+    const rawSession = body.session_id || body.session_token || null;
+    const sessionId = typeof rawSession === "string" && rawSession.length <= 64 ? rawSession : null;
 
     if (!error_message) {
       return NextResponse.json({ error: "Missing error_message" }, { status: 400 });
@@ -19,8 +28,7 @@ export async function POST(req: NextRequest) {
     let targetScriptName: string | null = null;
 
     if (sessionId) {
-      const sessions = await dbService.getSessions();
-      const session = sessions.find((s) => s.id === sessionId);
+      const session = await dbService.getSessionById(sessionId);
       if (session) {
         robloxUsername = session.roblox_username;
         robloxUserId = session.roblox_user_id;
@@ -29,7 +37,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (targetScriptId) {
-      const scripts = await dbService.getScripts();
+      const scripts = await dbService.getScriptsLite();
       const script = scripts.find((s) => s.id === targetScriptId || s.slug === targetScriptId);
       if (script) {
         targetScriptName = script.name;
@@ -50,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, id: recorded.id });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error logging client error";
+    const message = publicError(err, "Error logging client error");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -64,7 +72,7 @@ export async function GET() {
     const errors = await dbService.getClientErrors(200);
     return NextResponse.json({ errors });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error retrieving client errors";
+    const message = publicError(err, "Error retrieving client errors");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -78,7 +86,7 @@ export async function DELETE() {
     await dbService.clearClientErrors();
     return NextResponse.json({ success: true, message: "Client error logs cleared." });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error clearing client errors";
+    const message = publicError(err, "Error clearing client errors");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

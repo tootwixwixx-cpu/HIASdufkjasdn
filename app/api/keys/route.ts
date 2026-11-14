@@ -47,6 +47,15 @@ export async function POST(req: NextRequest) {
       notes = "",
     } = body;
 
+    // Must match the database CHECK constraint, otherwise the insert fails silently and the
+    // dashboard would show a key that doesn't exist.
+    if (custom_key && !/^[A-Za-z0-9_-]{6,64}$/.test(String(custom_key).trim())) {
+      return NextResponse.json(
+        { error: "Custom key must be 6–64 characters: letters, numbers, '-' or '_'." },
+        { status: 400 }
+      );
+    }
+
     if (is_staff_review) {
       const staffKeyString =
         custom_key && custom_key.trim()
@@ -82,6 +91,7 @@ export async function POST(req: NextRequest) {
     }
 
     const created = await dbService.createKeys(generatedList);
+    void dbService.audit("keys.create", { details: { count: created.length, script_id: script_id || "all" } });
     return NextResponse.json({ success: true, count: created.length, keys: created });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Error generating keys";
@@ -100,7 +110,12 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing key id" }, { status: 400 });
 
     if (status) {
+      // Only the four valid states are accepted (the DB also enforces this with a CHECK constraint).
+      if (!["unclaimed", "claimed", "active", "banned"].includes(status)) {
+        return NextResponse.json({ error: "Invalid key status." }, { status: 400 });
+      }
       await dbService.updateKeyStatus(id, status);
+      void dbService.audit("keys.status", { target: id, details: { status } });
     }
     if (notes !== undefined) {
       await dbService.updateKeyNotes(id, notes && notes.trim() ? notes.trim() : null);
@@ -129,6 +144,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     await dbService.deleteKey(id);
+    void dbService.audit("keys.delete", { target: id });
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Error deleting key";

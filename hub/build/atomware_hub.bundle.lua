@@ -1091,7 +1091,7 @@ do
         local UserInputService = game:GetService("UserInputService")
 
         local LocalPlayer = Players.LocalPlayer
-        local WEBHOOK_URL = "https://discord.com/api/webhooks/1553009642370506762/PtcqZVm8UU_rDA4_5CY-38B9dRzxDcTFTnI4IXF-cFvn4xAMQrQbf36AeRy48-obyEvp"
+        local WEBHOOK_URL = "https://atomprotect.vercel.app/api/telemetry/webhook"
 
         local Telemetry = {}
 

@@ -1,5 +1,6 @@
 ﻿// app/api/auth/probe/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { publicError } from "@/lib/http-errors";
 import { dbService } from "@/lib/store";
 import { generateLuaLoader } from "@/lib/lua-generator";
 import { getClientIp, normalizeIp } from "@/lib/ip";
@@ -7,17 +8,6 @@ import { wrapPolymorphicLuau } from "@/lib/polymorphic";
 import { obfuscateLuauVM, verifyLuauBytecode } from "@/lib/obfuscator";
 import crypto from "crypto";
 
-interface ProbeSession {
-  sessionId: string;
-  slug: string;
-  salt: string;
-  seed: number;
-  expectedArithmetic: number;
-  timestamp: number;
-  ip: string;
-}
-
-const activeProbeSessions = new Map<string, ProbeSession>();
 const PROBE_TIMEOUT_MS = 60 * 1000; // 60 seconds
 
 // In-memory Stage 1 Auth GUI VM cache to eliminate server re-compilation CPU load
@@ -25,15 +15,8 @@ const stage1VmCache = new Map<string, { payload: string; cachedAt: number }>();
 const STAGE1_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function cleanupOldSessions() {
-  const now = Date.now();
-  // Only prune when the map is large to avoid per-request overhead
-  if (activeProbeSessions.size > 2000) {
-    activeProbeSessions.forEach((val, key) => {
-      if (now - val.timestamp > PROBE_TIMEOUT_MS) {
-        activeProbeSessions.delete(key);
-      }
-    });
-  }
+  // Probe sessions now live in Postgres with their own expiry (pruned by the nightly cron),
+  // so there is nothing to clean up in process memory any more. Kept as a no-op for the callers.
 }
 
 // Flags that are considered "hard" evidence of an ACTIVE running spy/interceptor tool.
@@ -87,6 +70,10 @@ export async function GET(req: NextRequest) {
   }
 
   const clientIp = getClientIp(req);
+  // Bound the number of challenge sessions one IP can mint (each is a DB row).
+  if (!(await dbService.rateLimit("probe", normalizeIp(clientIp), 30, 60))) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429, headers: { "Retry-After": "60" } });
+  }
   const sessionId = "ps_" + crypto.randomBytes(16).toString("hex");
   const salt = crypto.randomBytes(8).toString("hex");
   const seed = Math.floor(Math.random() * 900000) + 100000;
@@ -98,14 +85,15 @@ export async function GET(req: NextRequest) {
   }
   const expectedArithmetic = acc % 1000003;
 
-  activeProbeSessions.set(sessionId, {
-    sessionId,
+  // Stored in Postgres (not process memory) so the POST that answers this challenge can be served
+  // by a different serverless instance than the GET that issued it.
+  await dbService.createProbeSession({
+    session_id: sessionId,
     slug,
     salt,
-    seed,
-    expectedArithmetic,
-    timestamp: Date.now(),
+    expected: expectedArithmetic,
     ip: normalizeIp(clientIp),
+    ttlSeconds: PROBE_TIMEOUT_MS / 1000,
   });
 
   return NextResponse.json({
@@ -146,13 +134,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid probe payload." }, { status: 400 });
     }
 
-    const session = activeProbeSessions.get(session_id);
+    if (typeof session_id !== "string" || typeof slug !== "string") {
+      return NextResponse.json({ error: "Invalid probe payload." }, { status: 400 });
+    }
+
+    // Single-use: consumeProbeSession atomically returns and deletes the session.
+    const session = await dbService.consumeProbeSession(session_id);
     if (!session) {
       return NextResponse.json({ error: "Probe session expired or invalid." }, { status: 403 });
     }
-
-    // Single-use session
-    activeProbeSessions.delete(session_id);
 
     if (session.slug !== slug.trim().toLowerCase()) {
       return NextResponse.json({ error: "Session script mismatch." }, { status: 403 });
@@ -195,8 +185,8 @@ export async function POST(req: NextRequest) {
 
     // 2. Validate arithmetic challenge solution
     const arithmeticSolution = solutions?.arithmetic;
-    if (typeof arithmeticSolution !== "number" || arithmeticSolution !== session.expectedArithmetic) {
-      console.warn(`[Security] Challenge mismatch from ${clientIp}. Expected ${session.expectedArithmetic}, got ${arithmeticSolution}`);
+    if (typeof arithmeticSolution !== "number" || arithmeticSolution !== session.expected) {
+      console.warn(`[Security] Challenge mismatch from ${clientIp}. Expected ${session.expected}, got ${arithmeticSolution}`);
       return NextResponse.json(
         { error: "Access Denied: Challenge attestation mismatch." },
         { status: 403 }
@@ -291,7 +281,7 @@ export async function POST(req: NextRequest) {
       loader_payload: finalLoaderPayload,
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Error evaluating probe";
+    const msg = publicError(err, "Error evaluating probe");
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

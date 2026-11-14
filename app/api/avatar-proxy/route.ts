@@ -25,7 +25,8 @@ const ALLOWED_AVATAR_HOSTS = new Set([
 function isAllowedAvatarUrl(raw: string): boolean {
   try {
     const u = new URL(raw);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+    if (u.protocol !== "https:") return false;
+    if (u.username || u.password || (u.port && u.port !== "443")) return false;
     return ALLOWED_AVATAR_HOSTS.has(u.hostname.toLowerCase());
   } catch {
     return false;
@@ -41,7 +42,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // redirect:"error" — an allow-listed host must not be able to bounce us to an internal/other host.
     const res = await fetch(targetUrl, {
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -50,13 +54,20 @@ export async function GET(req: NextRequest) {
       next: { revalidate: 3600 },
     });
 
-    if (res.ok) {
-      const contentType = res.headers.get("content-type") || "image/jpeg";
+    const MAX_BYTES = 2 * 1024 * 1024;
+    const declaredLen = Number(res.headers.get("content-length") || 0);
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    // Only real raster/vector images, never HTML/JS (SVG is served as an image, not inline), capped at 2 MB.
+    if (res.ok && ct.startsWith("image/") && !(declaredLen > MAX_BYTES)) {
+      const contentType = ct.split(";")[0] || "image/jpeg";
       const buffer = await res.arrayBuffer();
+      if (buffer.byteLength > MAX_BYTES) throw new Error("avatar too large");
       return new NextResponse(buffer, {
         status: 200,
         headers: {
           "Content-Type": contentType,
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
           "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400",
         },
       });

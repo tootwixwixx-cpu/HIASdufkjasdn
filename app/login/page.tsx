@@ -10,6 +10,8 @@ import { cn, focusRing } from "@/lib/utils";
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
+  const [needsTotp, setNeedsTotp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -22,11 +24,14 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, totp: totp || undefined }),
       });
 
       const data = await res.json();
+      if (data.totp_required) setNeedsTotp(true);
       if (!res.ok) {
+        // First response when 2FA is on: just reveal the code field, don't show it as an error.
+        if (data.totp_required && !totp) return;
         throw new Error(data.error || "Invalid username or password");
       }
 
@@ -92,6 +97,25 @@ export default function LoginPage() {
                 placeholder="••••••••••••"
               />
             </Field>
+
+            {needsTotp && (
+              <Field label="Authentication code" htmlFor="login-totp">
+                <Input
+                  id="login-totp"
+                  size="lg"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  required
+                  autoFocus
+                  autoComplete="one-time-code"
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value.replace(/\D/g, ""))}
+                  placeholder="6-digit code"
+                />
+              </Field>
+            )}
 
             <Button type="submit" variant="primary" size="lg" loading={submitting} className="mt-2 w-full">
               Sign in

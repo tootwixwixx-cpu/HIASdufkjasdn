@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
+import { getClientIp } from "@/lib/ip";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,13 @@ export async function GET(req: NextRequest) {
     const userId = searchParams.get("userId");
 
     if (userId) {
-      // A specific player's own thread. There's no player session token to verify
-      // ownership against here, so this stays reachable by userId (as the in-game
-      // client needs), but see POST/PATCH below for the admin-only operations.
+      // SECURITY: this used to return ANY player's DM thread to anyone who supplied their (sequential,
+      // public) Roblox user id. Now the caller must be an admin, or have an authenticated key session
+      // for that exact Roblox user from the same IP address as this request.
+      const isAdmin = await isAuthenticated(req);
+      if (!isAdmin && !(await dbService.getPlayerSession(userId, getClientIp(req)))) {
+        return NextResponse.json({ success: false, error: "No active authenticated session for this player." }, { status: 401 });
+      }
       const messages = await dbService.getDevMessages(userId);
       return NextResponse.json({ success: true, messages });
     }
@@ -26,7 +31,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, conversations });
   } catch (error: any) {
     console.error("Error fetching dev messages:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -41,6 +46,9 @@ export async function POST(req: NextRequest) {
     if (!message || typeof message !== "string" || !message.trim()) {
       return NextResponse.json({ success: false, error: "Message text is required" }, { status: 400 });
     }
+    if (message.length > 1000) {
+      return NextResponse.json({ success: false, error: "Message is too long (max 1000 characters)." }, { status: 400 });
+    }
 
     const type = senderType === "dev" ? "dev" : "user";
 
@@ -50,14 +58,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const senderUsername = type === "dev" ? "Admin / Dev" : (username ? String(username) : "Player");
-    const senderDisplayName = type === "dev" ? "Admin / Dev" : (displayName ? String(displayName) : senderUsername);
+    // A player message must come from that player's own authenticated session (same IP). The
+    // identity written to the thread comes from the SESSION, not from the request body, so a player
+    // can't post into someone else's thread or impersonate another account.
+    let senderUsername = "Admin / Dev";
+    let senderDisplayName = "Admin / Dev";
+    let threadUserId = String(userId);
+    if (type === "user") {
+      const sess = await dbService.getPlayerSession(String(userId), getClientIp(req));
+      if (!sess) {
+        return NextResponse.json({ success: false, error: "No active authenticated session for this player." }, { status: 401 });
+      }
+      threadUserId = String(sess.roblox_user_id);
+      senderUsername = sess.roblox_username || "Player";
+      senderDisplayName = typeof displayName === "string" && displayName.trim() ? displayName.trim().slice(0, 40) : senderUsername;
+    }
 
     const result = await dbService.postDevMessage({
-      user_id: String(userId),
+      user_id: threadUserId,
       username: senderUsername,
       display_name: senderDisplayName,
-      avatar_url: avatarUrl ? String(avatarUrl) : undefined,
+      avatar_url: type === "user" ? `/api/roblox/avatar?userId=${threadUserId}` : (avatarUrl ? String(avatarUrl).slice(0, 300) : undefined),
       sender_type: type,
       message: message.trim(),
     });
@@ -76,7 +97,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, message: result.data });
   } catch (error: any) {
     console.error("Error sending dev message:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -95,11 +116,14 @@ export async function PATCH(req: NextRequest) {
     if (readerRole !== "player" && !(await isAuthenticated(req))) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
+    if (readerRole === "player" && !(await dbService.getPlayerSession(String(userId), getClientIp(req)))) {
+      return NextResponse.json({ success: false, error: "No active authenticated session for this player." }, { status: 401 });
+    }
 
     await dbService.markDevMessagesRead(String(userId), readerRole);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error marking messages read:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }

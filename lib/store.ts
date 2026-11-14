@@ -91,6 +91,18 @@ const scriptBySlugCache = new Map<string, { at: number; value: ScriptRecord | nu
 let scriptsLiteCache: { at: number; value: ScriptRecord[] } | null = null;
 const scriptsLiteInflight: { p: Promise<ScriptRecord[]> | null } = { p: null };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const STAFF_REVIEW_ID_RE = /^staff_review_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+let onlineCountCache: { at: number; value: number } | null = null;
+const adminSessionCache = new Map<string, { ok: boolean; at: number }>();
+const playerSessionCache = new Map<string, { at: number; value: SessionRecord | null }>();
+const memRateLimits = new Map<string, { count: number; resetAt: number }>();
+const memNonces = new Map<string, number>();
+const memProbeSessions = new Map<
+  string,
+  { session_id: string; slug: string; salt: string; expected: number; ip: string; ttlSeconds: number; expiresAt: number }
+>();
+
 function invalidateScriptCaches() {
   scriptBySlugCache.clear();
   scriptsLiteCache = null;
@@ -111,6 +123,7 @@ export interface KeyRecord {
   created_at: string;
   is_staff_review?: boolean;
   notes?: string | null;
+  ip_reset_at?: string | null;
 }
 
 export function isStaffReviewKey(k: KeyRecord | null | undefined): boolean {
@@ -825,14 +838,24 @@ export const dbService = {
           };
         }
 
-        // Case-insensitive name lookup or UUID lookup
-        let query = supabase.from("scripts").select("*");
+        // Case-insensitive name lookup or UUID lookup.
+        // SECURITY: this used to interpolate the raw caller-supplied value into a PostgREST `or(...)`
+        // filter string, so a slug containing `,` / `)` could inject extra filter clauses (e.g. match
+        // any script), and `%` / `_` acted as wildcards. Now each condition is a separate, parameterised
+        // filter with LIKE metacharacters escaped, and only plausible names/slugs are looked up at all.
+        let list: any[] | null = null;
         if (isUuid) {
-          query = query.or(`slug.ilike.${normalized},name.ilike.${normalized},id.eq.${clean}`);
-        } else {
-          query = query.or(`slug.ilike.${normalized},name.ilike.${normalized}`);
+          const { data } = await supabase.from("scripts").select("*").eq("id", clean).limit(1);
+          list = data;
+        } else if (/^[\w .-]{1,120}$/.test(clean)) {
+          const escaped = normalized.replace(/[\\%_]/g, (m) => "\\" + m);
+          const bySlug = await supabase.from("scripts").select("*").ilike("slug", escaped).limit(1);
+          list = bySlug.data && bySlug.data.length ? bySlug.data : null;
+          if (!list) {
+            const byName = await supabase.from("scripts").select("*").ilike("name", escaped).limit(1);
+            list = byName.data;
+          }
         }
-        const { data: list } = await query;
         if (list && list.length > 0) {
           const matched = list[0];
           return {
@@ -1140,10 +1163,13 @@ export const dbService = {
     // 1. Check Supabase first if configured
     if (isSupabaseConfigured && supabase) {
       try {
+        // Filter by IP in the database (was: download every claimed/active key and filter in JS).
+        // claimed_ip is always stored normalized (claimKey / activateKey / resetKeyIp).
         const { data, error } = await supabase
           .from("keys")
           .select("*")
-          .in("status", ["claimed", "active"]);
+          .in("status", ["claimed", "active"])
+          .in("claimed_ip", [target, "::ffff:" + target]);
 
         if (data && !error && data.length > 0) {
           const match = (data as KeyRecord[]).find(matchesActiveKey);
@@ -1161,6 +1187,30 @@ export const dbService = {
   },
 
   async claimKey(scriptId: string, ip: string, discord?: { id: string; tag: string }): Promise<KeyRecord | null> {
+    // Preferred path: one atomic UPDATE ... FOR UPDATE SKIP LOCKED in Postgres, so two
+    // concurrent claimants can never be handed the same key (the select-then-update path
+    // below is racy). Falls back to the legacy path only if the function isn't deployed yet.
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.rpc("claim_key", {
+          p_script_id: scriptId || "all",
+          p_ip: ip,
+          p_discord_id: discord?.id ?? null,
+          p_discord_tag: discord?.tag ?? null,
+        });
+        if (!error) {
+          const row = Array.isArray(data) ? data[0] : data;
+          return row && row.id ? (row as KeyRecord) : null;
+        }
+        if (error.code !== "PGRST202" && error.code !== "42883") {
+          console.error("claim_key rpc error:", error.message);
+          return null;
+        }
+      } catch (err) {
+        console.error("claim_key rpc exception:", err);
+      }
+    }
+
     const isEligibleKey = (k: KeyRecord) => {
       if (k.status !== "unclaimed") return false;
       if (isStaffReviewKey(k) || k.is_staff_review) return false;
@@ -1405,11 +1455,14 @@ export const dbService = {
       throw new Error("Cannot bind key to blacklisted IP address.");
     }
 
-    // 12-hour cooldown check via note tag [IP_RESET:<timestamp>]
+    // 12-hour cooldown. Source of truth is the dedicated `ip_reset_at` column; the legacy
+    // `[IP_RESET:<ts>]` tag in `notes` is still honoured so existing keys keep their cooldown.
     const COOLDOWN_MS = 12 * 60 * 60 * 1000;
-    const match = (key.notes || "").match(/\[IP_RESET:(\d+)\]/);
-    if (match) {
-      const lastReset = Number(match[1]);
+    const tagMatch = (key.notes || "").match(/\[IP_RESET:(\d+)\]/);
+    const columnMs = key.ip_reset_at ? Date.parse(key.ip_reset_at) : NaN;
+    const lastResetMs = !isNaN(columnMs) ? columnMs : tagMatch ? Number(tagMatch[1]) : NaN;
+    if (!isNaN(lastResetMs)) {
+      const lastReset = lastResetMs;
       const elapsed = Date.now() - lastReset;
       if (elapsed < COOLDOWN_MS) {
         const remainingHours = Math.ceil((COOLDOWN_MS - elapsed) / (60 * 60 * 1000));
@@ -1419,8 +1472,9 @@ export const dbService = {
 
     const normNewIp = normalizeIp(newIp);
     key.claimed_ip = normNewIp;
-    const cleanNotes = (key.notes || "").replace(/\[IP_RESET:\d+\]/g, "").trim();
-    key.notes = cleanNotes ? `${cleanNotes} [IP_RESET:${Date.now()}]` : `[IP_RESET:${Date.now()}]`;
+    key.ip_reset_at = new Date().toISOString();
+    // Strip the legacy tag; the cooldown now lives in the column.
+    key.notes = (key.notes || "").replace(/\s*\[IP_RESET:\d+\]/g, "").trim() || null;
 
     const db = readLocalDb();
     const localIdx = db.keys.findIndex((k) => k.id === key.id);
@@ -1429,13 +1483,20 @@ export const dbService = {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase
+        const { error } = await supabase
           .from("keys")
           .update({
             claimed_ip: key.claimed_ip,
             notes: key.notes,
+            ip_reset_at: key.ip_reset_at,
           })
           .eq("id", key.id);
+        if (error) {
+          // Database predates the ip_reset_at column: fall back to the legacy notes tag so the
+          // cooldown is still enforced.
+          const legacyNotes = `${key.notes ? key.notes + " " : ""}[IP_RESET:${Date.now()}]`;
+          await supabase.from("keys").update({ claimed_ip: key.claimed_ip, notes: legacyNotes }).eq("id", key.id);
+        }
       } catch (err) {
         console.error("Supabase resetKeyIp error:", err);
       }
@@ -1599,6 +1660,286 @@ export const dbService = {
     return count;
   },
 
+  // --- Shared security primitives (Postgres-backed so they work across serverless instances) ---
+  // Each calls a SECURITY DEFINER function defined in migration/001_schema.sql. If the function
+  // doesn't exist yet (old database), they fall back to per-instance memory so nothing breaks
+  // mid-migration — but the memory fallback is NOT safe on serverless; deploy the schema.
+
+  /** Returns true if the action is allowed (under the limit), false if it should be blocked. */
+  async rateLimit(bucket: string, key: string, limit: number, windowSeconds: number): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.rpc("rate_limit_hit", {
+          p_bucket: bucket,
+          p_key: key,
+          p_limit: limit,
+          p_window_seconds: windowSeconds,
+        });
+        if (!error && typeof data === "boolean") return data;
+      } catch {
+        // fall through to memory
+      }
+    }
+    const now = Date.now();
+    const k = `${bucket}:${key}`;
+    if (memRateLimits.size > 5000) {
+      memRateLimits.forEach((v, kk) => {
+        if (now > v.resetAt) memRateLimits.delete(kk);
+      });
+    }
+    const rec = memRateLimits.get(k);
+    if (!rec || now > rec.resetAt) {
+      memRateLimits.set(k, { count: 1, resetAt: now + windowSeconds * 1000 });
+      return true;
+    }
+    rec.count += 1;
+    return rec.count <= limit;
+  },
+
+  /** Returns true the first time a nonce is seen within the TTL, false on replay. */
+  async consumeNonce(nonce: string, ttlSeconds: number = 300): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.rpc("consume_nonce", { p_nonce: nonce, p_ttl_seconds: ttlSeconds });
+        if (!error && typeof data === "boolean") return data;
+      } catch {
+        // fall through
+      }
+    }
+    const now = Date.now();
+    const exp = memNonces.get(nonce);
+    if (exp !== undefined && now < exp) return false;
+    if (memNonces.size > 5000) {
+      memNonces.forEach((v, kk) => {
+        if (now > v) memNonces.delete(kk);
+      });
+    }
+    memNonces.set(nonce, now + ttlSeconds * 1000);
+    return true;
+  },
+
+  async createProbeSession(s: {
+    session_id: string;
+    slug: string;
+    salt: string;
+    expected: number;
+    ip: string;
+    ttlSeconds: number;
+  }): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.rpc("create_probe_session", {
+          p_session_id: s.session_id,
+          p_slug: s.slug,
+          p_salt: s.salt,
+          p_expected: s.expected,
+          p_ip: s.ip,
+          p_ttl_seconds: s.ttlSeconds,
+        });
+        if (!error) return;
+      } catch {
+        // fall through
+      }
+    }
+    memProbeSessions.set(s.session_id, { ...s, expiresAt: Date.now() + s.ttlSeconds * 1000 });
+  },
+
+  /** Single-use: returns the session and deletes it, or null if missing/expired. */
+  async consumeProbeSession(
+    sessionId: string
+  ): Promise<{ slug: string; salt: string; expected: number; ip: string } | null> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.rpc("consume_probe_session", { p_session_id: sessionId });
+        if (!error) {
+          const row = Array.isArray(data) ? data[0] : data;
+          return row && row.slug ? { slug: row.slug, salt: row.salt, expected: Number(row.expected), ip: row.ip } : null;
+        }
+      } catch {
+        // fall through
+      }
+    }
+    const m = memProbeSessions.get(sessionId);
+    if (!m) return null;
+    memProbeSessions.delete(sessionId);
+    if (Date.now() > m.expiresAt) return null;
+    return { slug: m.slug, salt: m.salt, expected: m.expected, ip: m.ip };
+  },
+
+  /** Single-use claim-token consumption. Returns true if this is the first use. */
+  async consumeClaimToken(tokenId: string, ttlSeconds: number = 900): Promise<boolean> {
+    return this.consumeNonce("claim:" + tokenId, ttlSeconds);
+  },
+
+  // --- Admin sessions (server-side, revocable) ---
+
+  async createAdminSession(s: {
+    token_hash: string;
+    admin_username: string;
+    ip_address: string | null;
+    device_info: string | null;
+    expires_at: string;
+  }): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) return; // local dev: token signature alone is trusted
+    const { error } = await supabase.from("admin_sessions").insert({ ...s, is_active: true });
+    if (error) throw new Error("Could not create admin session: " + error.message);
+    adminSessionCache.delete(s.token_hash);
+  },
+
+  async isAdminSessionLive(tokenHash: string): Promise<boolean> {
+    if (!isSupabaseConfigured || !supabase) return true;
+    const now = Date.now();
+    const cached = adminSessionCache.get(tokenHash);
+    if (cached && now - cached.at < 15000) return cached.ok;
+    try {
+      const { data, error } = await supabase
+        .from("admin_sessions")
+        .select("is_active, expires_at, last_active_at")
+        .eq("token_hash", tokenHash)
+        .maybeSingle();
+      if (error) throw error;
+      const ok = Boolean(data && data.is_active && new Date(data.expires_at).getTime() > now);
+      adminSessionCache.set(tokenHash, { ok, at: now });
+      if (adminSessionCache.size > 500) adminSessionCache.clear();
+      if (ok && data && now - new Date(data.last_active_at).getTime() > 5 * 60 * 1000) {
+        void supabase.from("admin_sessions").update({ last_active_at: new Date().toISOString() }).eq("token_hash", tokenHash);
+      }
+      return ok;
+    } catch (err) {
+      console.error("isAdminSessionLive error:", err);
+      // DB hiccup: keep a recently-confirmed session alive for a short grace period, otherwise fail closed.
+      return Boolean(cached && cached.ok && now - cached.at < 5 * 60 * 1000);
+    }
+  },
+
+  async revokeAdminSession(tokenHash: string): Promise<void> {
+    adminSessionCache.set(tokenHash, { ok: false, at: Date.now() });
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from("admin_sessions").update({ is_active: false }).eq("token_hash", tokenHash);
+    }
+  },
+
+  async revokeAllAdminSessions(): Promise<void> {
+    adminSessionCache.clear();
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from("admin_sessions").update({ is_active: false }).eq("is_active", true);
+    }
+  },
+
+  // --- Player identity for public endpoints (chat / DMs / telemetry) ---
+  // A request may act as Roblox user X only if X has a recent, authenticated (key-verified) session from
+  // the SAME IP address as this request. The client-supplied userId alone proves nothing.
+  async getPlayerSession(userId: string, ip: string): Promise<SessionRecord | null> {
+    if (!userId || !/^\d{1,12}$/.test(userId) || !ip) return null;
+    const cacheKey = `${userId}|${ip}`;
+    const now = Date.now();
+    const cached = playerSessionCache.get(cacheKey);
+    if (cached && now - cached.at < (cached.value ? 30000 : 10000)) return cached.value;
+
+    let found: SessionRecord | null = null;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const cutoff = new Date(now - 10 * 60 * 1000).toISOString();
+        const { data } = await supabase
+          .from("sessions")
+          .select("*")
+          .eq("roblox_user_id", userId)
+          .eq("ip_address", ip)
+          .eq("status", "active")
+          .gte("last_heartbeat", cutoff)
+          .order("last_heartbeat", { ascending: false })
+          .limit(1);
+        found = data && data.length ? (data[0] as SessionRecord) : null;
+      } catch (err) {
+        console.error("getPlayerSession error:", err);
+      }
+    } else {
+      found =
+        (readLocalDb().sessions || []).find(
+          (s) => s.roblox_user_id === userId && s.ip_address === ip && s.status === "active"
+        ) || null;
+    }
+    if (playerSessionCache.size > 2000) playerSessionCache.clear();
+    playerSessionCache.set(cacheKey, { at: now, value: found });
+    return found;
+  },
+
+  /** Deletes expired rows from the security tables (also scheduled via pg_cron if enabled). */
+  async pruneSecurityTables(): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) return;
+    const { error } = await supabase.rpc("prune_security_tables");
+    if (error && error.code !== "PGRST202") console.error("prune_security_tables error:", error.message);
+  },
+
+  /** Best-effort audit trail (table exists in the new schema; silently ignored if it doesn't). */
+  async audit(action: string, opts: { target?: string; ip?: string; details?: Record<string, unknown> } = {}): Promise<void> {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      await supabase.from("audit_log").insert({
+        actor: "admin",
+        action,
+        target: opts.target ? String(opts.target).slice(0, 200) : null,
+        ip_address: opts.ip || null,
+        details: opts.details || {},
+      });
+    } catch {
+      // never let auditing break a request
+    }
+  },
+
+  // --- Targeted lookups (avoid full-table scans on hot request paths) ---
+
+  async getSessionById(id: string): Promise<SessionRecord | null> {
+    if (!id || !UUID_RE.test(id)) return null;
+    const local = (readLocalDb().sessions || []).find((s) => s.id === id) || null;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase.from("sessions").select("*").eq("id", id).maybeSingle();
+        if (data) return data as SessionRecord;
+      } catch (err) {
+        console.error("Supabase getSessionById error:", err);
+      }
+    }
+    return local;
+  },
+
+  async getStaffReviewById(id: string): Promise<StaffReviewRecord | null> {
+    if (!id || !STAFF_REVIEW_ID_RE.test(id)) return null;
+    const local = (readLocalDb().staff_reviews || []).find((r) => r.id === id) || null;
+    if (local) return local;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data } = await supabase.from("staff_reviews").select("*").eq("id", id).maybeSingle();
+        if (data) return data as StaffReviewRecord;
+      } catch (err) {
+        console.error("Supabase getStaffReviewById error:", err);
+      }
+    }
+    return null;
+  },
+
+  // Cheap online-player count (COUNT, no row transfer), cached briefly.
+  async getOnlineCount(maxAgeMs: number = 35000): Promise<number> {
+    const now = Date.now();
+    if (onlineCountCache && now - onlineCountCache.at < 10000) return onlineCountCache.value;
+    let value = 0;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const cutoffIso = new Date(now - maxAgeMs).toISOString();
+        const { count } = await supabase
+          .from("sessions")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "active")
+          .gte("last_heartbeat", cutoffIso);
+        value = count || 0;
+      } catch (err) {
+        console.error("Supabase getOnlineCount error:", err);
+      }
+    }
+    onlineCountCache = { at: now, value };
+    return value;
+  },
+
   async getSessionByToken(loaderToken: string): Promise<SessionRecord | null> {
     const db = readLocalDb();
     const local = (db.sessions || []).find((s) => s.loader_token === loaderToken) || null;
@@ -1748,8 +2089,13 @@ export const dbService = {
 
     const now = new Date().toISOString();
 
-    // 2. If session wasn't found anywhere (e.g. serverless cold start / fresh deployment),
-    // NEVER terminate legitimate users due to ephemeral memory loss. Revive gracefully!
+    // 2. Unknown session id. SECURITY: this used to "revive" any unrecognised id into a brand-new
+    // ACTIVE session with no key, so anyone could mint unlimited fake online players by pinging
+    // random UUIDs. Sessions are only created by /api/auth/verify and /api/session/loader-ping.
+    // The heartbeat route fails open on this error, so real players are never kicked for it.
+    if (!session && isSupabaseConfigured && supabase) {
+      throw new Error("Unknown session");
+    }
     if (!session) {
       session = {
         id: sessionId,
@@ -1914,7 +2260,10 @@ export const dbService = {
       try {
         let query = supabase.from("global_announcements").select("*").order("created_at", { ascending: false });
         if (scriptId && scriptId !== "all") {
-          query = query.or(`script_id.eq.all,script_id.eq.${scriptId}`);
+          // Only interpolate a validated UUID into the filter string (prevents filter injection).
+          query = UUID_RE.test(scriptId)
+            ? query.or(`script_id.eq.all,script_id.eq.${scriptId}`)
+            : query.eq("script_id", "all");
         }
         const { data, error } = await query.limit(50);
         if (data && !error) {
@@ -2585,6 +2934,34 @@ export const dbService = {
       }
     }
     return record;
+  },
+
+  /**
+   * True if the checkpoint session has a log row for `stage` (and optionally a given step index).
+   * Used to enforce that checkpoint steps are completed in order, server-side.
+   */
+  async hasCheckpointLog(sessionId: string, stage: string, stepIndex?: number): Promise<boolean> {
+    if (!sessionId) return false;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let q = supabase
+          .from("checkpoint_logs")
+          .select("id", { count: "exact", head: true })
+          .eq("session_id", sessionId)
+          .eq("stage", stage);
+        if (stepIndex !== undefined) q = q.eq("step_index", stepIndex);
+        const { count, error } = await q;
+        if (!error) return (count || 0) > 0;
+        console.error("hasCheckpointLog error:", error.message);
+      } catch (err) {
+        console.error("hasCheckpointLog exception:", err);
+      }
+    }
+    const logs = readLocalDb().checkpoint_logs || [];
+    return logs.some(
+      (l) =>
+        l.session_id === sessionId && l.stage === stage && (stepIndex === undefined || l.step_index === stepIndex)
+    );
   },
 
   async recordCheckpoint(

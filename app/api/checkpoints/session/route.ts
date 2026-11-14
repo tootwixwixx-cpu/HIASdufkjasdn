@@ -1,8 +1,9 @@
 ﻿// app/api/checkpoints/session/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { publicError } from "@/lib/http-errors";
 import { dbService } from "@/lib/store";
 import { getClientIp } from "@/lib/ip";
-import { antiBypassService } from "@/lib/anti-bypass";
+import { antiBypassService, verifySignedToken, type GatewayTokenPayload } from "@/lib/anti-bypass";
 import { verifyWorkinkToken } from "@/lib/workink";
 
 export const dynamic = "force-dynamic";
@@ -108,6 +109,21 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // SECURITY: every step's gateway token is handed to the client up front, so without this a
+      // client could start (and, after the dwell time + PoW, verify) ONLY the last step and be
+      // issued a claim token, skipping every earlier checkpoint. Enforce order server-side:
+      // step N can only be started once step N-1 has been verified for this same session.
+      const gw = verifySignedToken<GatewayTokenPayload>(gatewayToken);
+      if (gw.valid && gw.payload && gw.payload.step > 0) {
+        const prevDone = await dbService.hasCheckpointLog(gw.payload.sid, "step_completed", gw.payload.step - 1);
+        if (!prevDone) {
+          return NextResponse.json(
+            { success: false, error: "Please complete the previous checkpoint step first." },
+            { status: 400 }
+          );
+        }
+      }
+
       const result = antiBypassService.startStep(gatewayToken, ip);
 
       if (!result.success) {
@@ -185,14 +201,13 @@ export async function POST(req: NextRequest) {
 
       // Record step progress or completion
       if (result.success) {
+        // Record against the server-signed session id / step index (not client-supplied values) so
+        // the ordering check in start_step can rely on it.
+        const stepMeta = { stepIndex: result.step, sessionId: result.sid };
         if (result.allCompleted) {
-          await dbService.recordCheckpoint("completed", ip, script_id || undefined, {
-            stepIndex: typeof stepIndex === "number" ? stepIndex : undefined,
-          });
+          await dbService.recordCheckpoint("completed", ip, script_id || undefined, stepMeta);
         } else {
-          await dbService.recordCheckpoint("step_completed", ip, script_id || undefined, {
-            stepIndex: typeof stepIndex === "number" ? stepIndex : undefined,
-          });
+          await dbService.recordCheckpoint("step_completed", ip, script_id || undefined, stepMeta);
         }
       }
 
@@ -203,11 +218,39 @@ export async function POST(req: NextRequest) {
 
     // ACTION: VERIFY WORKINK TOKEN (Strict API validation with ?deleteToken=1)
     if (action === "verify_workink") {
-      const { token, sessionId, stepIndex, script_id, totalSteps } = body;
+      const { token, sessionId, stepIndex, script_id } = body;
 
       if (!token || typeof token !== "string") {
         return NextResponse.json(
           { success: false, error: "Missing required Work.ink completion token." },
+          { status: 400 }
+        );
+      }
+
+      // SECURITY: stepIndex / totalSteps / script_id used to be trusted verbatim from the client,
+      // so one valid Work.ink token plus `totalSteps: 1` produced a claim token and skipped every
+      // other checkpoint. Derive the real totals server-side, require a real checkpoint session,
+      // and require earlier steps to be completed first.
+      if (!sessionId || typeof sessionId !== "string" || !(await dbService.hasCheckpointLog(sessionId, "started"))) {
+        return NextResponse.json(
+          { success: false, error: "Checkpoint session not found. Please reload the claim page and start again." },
+          { status: 400 }
+        );
+      }
+      let resolvedScriptId: string = typeof script_id === "string" ? script_id : "";
+      if (resolvedScriptId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resolvedScriptId)) {
+        const sc = await dbService.getScriptMetaBySlug(resolvedScriptId);
+        resolvedScriptId = sc ? sc.id : "";
+      }
+      const configuredSteps = await dbService.getCheckpoints(resolvedScriptId || undefined);
+      const serverTotal = Math.max(1, configuredSteps.length);
+      const requestedStep = typeof stepIndex === "number" && stepIndex >= 0 ? Math.floor(stepIndex) : 0;
+      if (requestedStep >= serverTotal) {
+        return NextResponse.json({ success: false, error: "Invalid checkpoint step." }, { status: 400 });
+      }
+      if (requestedStep > 0 && !(await dbService.hasCheckpointLog(sessionId, "step_completed", requestedStep - 1))) {
+        return NextResponse.json(
+          { success: false, error: "Please complete the previous checkpoint step first." },
           { status: 400 }
         );
       }
@@ -224,26 +267,28 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const currentStep = typeof stepIndex === "number" ? stepIndex : 0;
-      const total = typeof totalSteps === "number" ? totalSteps : 1;
+      const currentStep = requestedStep;
+      const total = serverTotal;
 
       const result = antiBypassService.completeWorkinkStep(
-        sessionId || "workink-session",
+        sessionId,
         currentStep,
         total,
-        script_id || "all",
+        resolvedScriptId || "all",
         ip
       );
 
       if (result.allCompleted) {
-        await dbService.recordCheckpoint("completed", ip, script_id || undefined, {
+        await dbService.recordCheckpoint("completed", ip, resolvedScriptId || undefined, {
           stepIndex: currentStep,
           checkpointTitle: "Work.ink Task Completed",
+          sessionId,
         });
       } else {
-        await dbService.recordCheckpoint("step_completed", ip, script_id || undefined, {
+        await dbService.recordCheckpoint("step_completed", ip, resolvedScriptId || undefined, {
           stepIndex: currentStep,
           checkpointTitle: "Work.ink Step Completed",
+          sessionId,
         });
       }
 
@@ -255,7 +300,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: "Unknown action." }, { status: 400 });
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : "Error handling checkpoint session";
+    const errorMsg = publicError(err, "Error handling checkpoint session");
     return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
   }
 }

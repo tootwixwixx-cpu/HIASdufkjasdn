@@ -43,6 +43,9 @@ export async function GET(
   { params }: { params: Promise<{ slug: string; modulePath: string[] }> }
 ) {
   const { slug, modulePath } = await params;
+  if (!/^[a-z0-9_-]{1,64}$/i.test(slug)) {
+    return new NextResponse("-- Error: Invalid script slug.", { status: 400, headers: { "Content-Type": "text/plain" } });
+  }
   const script = await dbService.getScriptBySlug(slug);
 
   if (isBrowserRequest(req)) {
@@ -77,31 +80,43 @@ export async function GET(
 
     if (sessionToken) {
       if (sessionToken.startsWith("staff_review")) {
-        isAuthorized = true;
+        // SECURITY: this used to be `isAuthorized = true` on the prefix alone, so
+        // `?session=staff_review` (or an x-session-id header) unlocked the raw, unobfuscated
+        // source of every module of every script for anyone. It must be a real, existing
+        // staff-review session id (unguessable uuid issued by /api/auth/verify).
+        const review = await dbService.getStaffReviewById(sessionToken);
+        if (review) isAuthorized = true;
       } else {
-        const sessions = await dbService.getSessions();
-        const active = sessions.find(
-          (s) => s.id === sessionToken && s.script_id === script.id && s.status === "active"
-        );
-        // SECURITY: bind this to the IP that originally started the session, same as
-        // the main /api/auth/verify flow does for key claims — a bare session id alone
-        // (e.g. leaked/logged) shouldn't be enough to pull every individual module's
-        // raw source from a different machine.
-        if (active && (!active.ip_address || normalizeIp(active.ip_address) === requestIp)) {
+        const active = await dbService.getSessionById(sessionToken);
+        // Bind to the IP that originally started the session, same as the main
+        // /api/auth/verify flow does for key claims — a bare session id alone
+        // (e.g. leaked/logged) shouldn't be enough to pull modules from a different machine.
+        if (
+          active &&
+          active.script_id === script.id &&
+          active.status === "active" &&
+          active.ip_address &&
+          normalizeIp(active.ip_address) === requestIp
+        ) {
           isAuthorized = true;
         }
       }
     }
 
-    if (!isAuthorized && key) {
-      const keys = await dbService.getKeys();
-      const validKey = keys.find(
-        (k) =>
-          k.key_string.toUpperCase() === key.trim().toUpperCase() &&
-          k.status === "active" &&
-          (k.script_id === "all" || k.script_id === script.id)
-      );
-      if (validKey) isAuthorized = true;
+    if (!isAuthorized && key && /^[A-Za-z0-9_-]{6,64}$/.test(key.trim())) {
+      // Targeted lookup (was: load every key in the table on every module request) and
+      // enforce the same rules as /api/auth/verify: active, not expired, bound to this IP.
+      const validKey = await dbService.getKeyByString(key.trim().toUpperCase());
+      if (
+        validKey &&
+        validKey.status === "active" &&
+        (validKey.script_id === "all" || validKey.script_id === script.id) &&
+        (!validKey.expires_at || new Date(validKey.expires_at).getTime() > Date.now()) &&
+        validKey.claimed_ip &&
+        normalizeIp(validKey.claimed_ip) === requestIp
+      ) {
+        isAuthorized = true;
+      }
     }
 
     if (!isAuthorized) {

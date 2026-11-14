@@ -14,7 +14,7 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("Error fetching chatroom settings:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const rawVal = body.cooldown_seconds !== undefined ? body.cooldown_seconds : body.cooldown;
     const cooldown = Number(rawVal);
-    if (isNaN(cooldown) || cooldown < 0) {
+    if (isNaN(cooldown) || cooldown < 0 || cooldown > 3600) {
       return NextResponse.json({ success: false, error: "Invalid cooldown value." }, { status: 400 });
     }
 
@@ -38,6 +38,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Error updating chatroom settings:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }

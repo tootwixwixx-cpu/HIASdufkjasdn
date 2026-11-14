@@ -1,5 +1,6 @@
 ﻿// app/api/creator-profile/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { publicError } from "@/lib/http-errors";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
 
@@ -15,7 +16,7 @@ export async function GET() {
       }
     );
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error fetching creator profile";
+    const message = publicError(err, "Error fetching creator profile");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     const updated = await dbService.saveCreatorProfile(body);
     return NextResponse.json({ success: true, profile: updated });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error saving creator profile";
+    const message = publicError(err, "Error saving creator profile");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

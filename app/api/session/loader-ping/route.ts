@@ -3,12 +3,17 @@
 // Creates/refreshes a lightweight "loading" session so the admin can see who is
 // sitting in the auth loader in real time.
 import { NextRequest, NextResponse } from "next/server";
+import { publicError } from "@/lib/http-errors";
 import { dbService } from "@/lib/store";
 import { getClientIp, getClientGeo } from "@/lib/ip";
 
 export async function POST(req: NextRequest) {
   try {
     const clientIp = getClientIp(req);
+    // Unauthenticated endpoint that writes a DB row: bound it per IP so it can't be used to bloat the table.
+    if (!(await dbService.rateLimit("loader-ping", clientIp, 20, 60))) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": "60" } });
+    }
     const clientGeo = getClientGeo(req);
     const body = await req.json();
 
@@ -22,7 +27,7 @@ export async function POST(req: NextRequest) {
       executor,
     } = body;
 
-    if (!loader_token || typeof loader_token !== "string") {
+    if (!loader_token || typeof loader_token !== "string" || loader_token.length > 128) {
       return NextResponse.json({ error: "loader_token required" }, { status: 400 });
     }
 
@@ -59,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Loader ping error";
+    const msg = publicError(err, "Loader ping error");
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

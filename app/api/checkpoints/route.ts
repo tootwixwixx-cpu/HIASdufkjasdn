@@ -1,5 +1,6 @@
 ﻿// app/api/checkpoints/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { publicError } from "@/lib/http-errors";
 import { dbService } from "@/lib/store";
 import { isAuthenticated } from "@/lib/auth";
 
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
       script: targetScript ? { id: targetScript.id, name: targetScript.name, slug: targetScript.slug } : null,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error fetching checkpoints";
+    const message = publicError(err, "Error fetching checkpoints");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, checkpoint: saved });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error saving checkpoint";
+    const message = publicError(err, "Error saving checkpoint");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
@@ -99,7 +100,7 @@ export async function DELETE(req: NextRequest) {
     const deleted = await dbService.deleteCheckpoint(id);
     return NextResponse.json({ success: deleted });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error deleting checkpoint";
+    const message = publicError(err, "Error deleting checkpoint");
     return NextResponse.json({ error: message, success: false }, { status: 500 });
   }
 }

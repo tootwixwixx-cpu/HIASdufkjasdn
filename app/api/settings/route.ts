@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const updated = await dbService.saveSettings(body);
+    void dbService.audit("settings.save", { details: { fields: Object.keys(body || {}) } });
     return NextResponse.json({ success: true, settings: updated });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Error saving settings";

@@ -40,7 +40,8 @@ const FEATURES = [
 export default async function HomePage() {
   const [settings, allScripts] = await Promise.all([
     dbService.getSettings(),
-    dbService.getScripts(),
+    // Metadata only: the public landing page must never pull every script's multi-MB payload columns.
+    dbService.getScriptsLite(),
   ]);
 
   const activeScripts: ScriptSummary[] = (allScripts || [])

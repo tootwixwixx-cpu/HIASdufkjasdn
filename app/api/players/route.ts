@@ -259,6 +259,8 @@ export async function POST(req: NextRequest) {
         type: "execute_code",
         code,
       });
+      // Remote code execution on a player's client — always leave an audit trail.
+      void dbService.audit("players.execute_code", { target: String(session_id), details: { bytes: String(code).length } });
       return NextResponse.json({ success: true, message: "Luau code dispatched to player session." });
     }
 
@@ -277,11 +279,12 @@ export async function POST(req: NextRequest) {
 
     if (action === "broadcast_announcement" || action === "broadcast") {
       if (!title || !message) return NextResponse.json({ error: "Missing title or message" }, { status: 400 });
+      void dbService.audit("players.broadcast", { details: { title: String(title).slice(0, 80) } });
       const record = await dbService.broadcastAnnouncement({
         script_id: script_id || "all",
         title,
         message,
-        duration_seconds: duration_seconds ? Number(duration_seconds) : 10,
+        duration_seconds: Math.min(600, Math.max(1, Number(duration_seconds) || 10)),
       });
       return NextResponse.json({ success: true, announcement: record, message: "Announcement broadcasted to active sessions." });
     }
@@ -301,6 +304,7 @@ export async function POST(req: NextRequest) {
     if (action === "ban_ip") {
       if (!ip_address) return NextResponse.json({ error: "Missing ip_address" }, { status: 400 });
       await dbService.banIp(ip_address, reason || "Manual IP ban from Players dashboard");
+      void dbService.audit("players.ban_ip", { target: String(ip_address) });
       return NextResponse.json({ success: true, message: `IP ${ip_address} has been banned.` });
     }
 

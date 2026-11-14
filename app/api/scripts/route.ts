@@ -5,8 +5,10 @@ import { isAuthenticated } from "@/lib/auth";
 import { obfuscateLuauVM, bundleModules, verifyLuauBytecode } from "@/lib/obfuscator";
 
 export async function GET() {
-  const scripts = await dbService.getScripts();
   const authed = (await isAuthenticated());
+  // Public callers only ever see a handful of metadata fields, so don't load every script's
+  // multi-MB payload columns for them (this endpoint is unauthenticated and was a DoS amplifier).
+  const scripts = authed ? await dbService.getScripts() : await dbService.getScriptsLite();
   if (!authed) {
     const publicScripts = scripts
       .filter((s) => s.is_active !== false)
@@ -179,7 +181,11 @@ export async function PATCH(req: NextRequest) {
         } else {
           bundledCode = bundleModules({ entryFile: targetEntryFile, files: updatedModules });
         }
-        const vmPreset = body.preset || existing.vm_preset || "balanced";
+        const requestedPreset = body.preset || existing.vm_preset;
+        const vmPreset =
+          requestedPreset === "maximum" || requestedPreset === "ultra" || requestedPreset === "debug"
+            ? requestedPreset
+            : "balanced";
         const obfResult = await obfuscateLuauVM(bundledCode, { preset: vmPreset });
         if (obfResult.ok) {
           const verifyCheck = verifyLuauBytecode(obfResult.output);
@@ -252,6 +258,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: "Missing script id" }, { status: 400 });
 
     await dbService.deleteScript(id);
+    void dbService.audit("scripts.delete", { target: id });
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : "Error deleting script";

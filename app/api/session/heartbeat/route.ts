@@ -82,8 +82,9 @@ export async function POST(req: NextRequest) {
     let expiresAt: string | null = null;
     let remainingSeconds: number | null = null;
     if (session.key_id && session.key_id !== "active") {
-      const keys = await dbService.getKeys();
-      const keyObj = keys.find((k) => k.id === session.key_id);
+      // Targeted lookup: this used to load EVERY key in the table on every heartbeat (every
+      // player, every ~15-30s).
+      const keyObj = await dbService.getKeyById(session.key_id);
       if (keyObj && keyObj.expires_at) {
         expiresAt = keyObj.expires_at;
         const diffMs = new Date(keyObj.expires_at).getTime() - Date.now();
@@ -117,12 +118,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Calculate live online user count (active within last 35 seconds)
-    const allSessions = await dbService.getSessions({ activeOnly: true, maxAgeMs: 35000 });
-    const threshold = Date.now() - 35000;
-    const onlineCount = allSessions.filter((s) => {
-      const pingTime = new Date(s.last_heartbeat).getTime();
-      return s.status === "active" && pingTime >= threshold;
-    }).length;
+    // COUNT query, cached for 10s (was: fetch up to 200 full session rows per heartbeat).
+    const onlineCount = await dbService.getOnlineCount(35000);
 
     const leaseToken = hmacSha256(session.id, Date.now() + ":" + Math.random().toString(36).slice(2));
 

@@ -321,6 +321,15 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
+  // SECURITY: the slug comes straight from the URL path and is interpolated into an HTML page
+  // (reflected XSS on this origin) and into generated Lua source. Slugs are always stored as
+  // [a-z0-9_-] (see saveScript), so reject anything else before it is used anywhere.
+  if (!/^[a-z0-9_-]{1,64}$/i.test(slug)) {
+    return new NextResponse(`-- Error: Invalid script slug.`, {
+      status: 400,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
   const clientIp = getClientIp(req);
   const userAgent = (req.headers.get("user-agent") || "").toLowerCase();
 
@@ -381,7 +390,8 @@ export async function GET(
   // Check Maintenance Kill-Switch
   if (script.is_maintenance) {
     const rawMsg = script.maintenance_message || "This script is currently under scheduled maintenance. Please check our Discord for updates.";
-    const safeMsg = rawMsg.replace(/"/g, '\\"');
+    // Escape for a Lua double-quoted string: backslash first, then quotes and newlines.
+    const safeMsg = rawMsg.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, "\\n");
     const maintenanceLua = `--[[ AERO AUTH SCRIPT UNDER MAINTENANCE ]]--
 pcall(function()
     local StarterGui = game:GetService("StarterGui")

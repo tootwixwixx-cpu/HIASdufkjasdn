@@ -46,6 +46,11 @@ export function isIpMatching(tokenIp: string, reqIp: string): boolean {
 }
 
 export function createSignedToken<T extends object>(payload: T): string {
+  // SECURITY: crypto.createHmac("sha256", "") happily signs with an empty key, so a missing
+  // ANTI_BYPASS_SECRET would silently let anyone forge gateway/step/claim tokens. Fail closed.
+  if (!HMAC_SECRET) {
+    throw new Error("ANTI_BYPASS_SECRET is not configured; cannot issue signed tokens.");
+  }
   const json = JSON.stringify(payload);
   const b64 = Buffer.from(json, "utf8").toString("base64url");
   const sig = crypto.createHmac("sha256", HMAC_SECRET).update(b64).digest("base64url");
@@ -55,6 +60,9 @@ export function createSignedToken<T extends object>(payload: T): string {
 export function verifySignedToken<T extends object>(
   token: string
 ): { valid: boolean; payload?: T; error?: string } {
+  if (!HMAC_SECRET) {
+    return { valid: false, error: "Server token signing is not configured." };
+  }
   if (!token || typeof token !== "string" || !token.includes(".")) {
     return { valid: false, error: "Malformed token format." };
   }
@@ -89,7 +97,11 @@ export function verifySignedToken<T extends object>(
   }
 }
 
-export function generatePoWChallenge(difficulty = 3): { nonce: string; difficulty: number } {
+// Difficulty 4 (~65k SHA-256 hashes on average, well under a second in a browser) — 16x the
+// cost of the old default of 3, which was trivially cheap to automate.
+export const POW_DIFFICULTY = 4;
+
+export function generatePoWChallenge(difficulty = POW_DIFFICULTY): { nonce: string; difficulty: number } {
   return {
     nonce: crypto.randomBytes(16).toString("hex"),
     difficulty,
@@ -163,7 +175,7 @@ export const antiBypassService = {
     const sessionId = crypto.randomUUID();
     const sorted = [...checkpoints].sort((a, b) => a.order - b.order);
     const totalSteps = sorted.length;
-    const powChallenge = generatePoWChallenge(3);
+    const powChallenge = generatePoWChallenge();
 
     const stepDetails = sorted.map((cp, idx) => {
       const isWorkink = Boolean(
@@ -281,7 +293,7 @@ export const antiBypassService = {
       };
     }
 
-    const powChallenge = generatePoWChallenge(3);
+    const powChallenge = generatePoWChallenge();
 
     // Stamp current server clock timestamp for strict temporal verification
     const activePayload: ActiveStepTokenPayload = {
@@ -325,6 +337,8 @@ export const antiBypassService = {
     error?: string;
     bypassDetected?: boolean;
     remainingSeconds?: number;
+    sid?: string;
+    step?: number;
   } {
     const res = verifySignedToken<ActiveStepTokenPayload>(activeStepToken);
     if (!res.valid || !res.payload) {
@@ -365,7 +379,7 @@ export const antiBypassService = {
 
     // Proof-of-Work Challenge Verification
     const nonceToVerify = payload.powNonce || powNonce || "";
-    const difficultyToVerify = payload.powDifficulty || 3;
+    const difficultyToVerify = payload.powDifficulty || POW_DIFFICULTY;
     if (nonceToVerify) {
       if (!powSolution || !powSolution.trim()) {
         return {
@@ -402,16 +416,20 @@ export const antiBypassService = {
         success: true,
         allCompleted: true,
         claimToken,
+        sid: payload.sid,
+        step: payload.step,
       };
     } else {
       const nextStepIndex = payload.step + 1;
-      const nextPow = generatePoWChallenge(3);
+      const nextPow = generatePoWChallenge();
 
       return {
         success: true,
         allCompleted: false,
         nextStep: nextStepIndex,
         nextPowChallenge: nextPow,
+        sid: payload.sid,
+        step: payload.step,
       };
     }
   },
@@ -452,7 +470,7 @@ export const antiBypassService = {
       };
     } else {
       const nextStepIndex = stepIndex + 1;
-      const nextPow = generatePoWChallenge(3);
+      const nextPow = generatePoWChallenge();
       return {
         success: true,
         allCompleted: false,
@@ -467,7 +485,7 @@ export const antiBypassService = {
     claimToken: string,
     ip: string,
     scriptId: string
-  ): { valid: boolean; error?: string } {
+  ): { valid: boolean; error?: string; tokenId?: string } {
     const res = verifySignedToken<ClaimTokenPayload>(claimToken);
     if (!res.valid || !res.payload) {
       return { valid: false, error: res.error || "Invalid or expired checkpoint authorization token." };
@@ -482,7 +500,20 @@ export const antiBypassService = {
       return { valid: false, error: "Claim IP address does not match verified checkpoint IP." };
     }
 
-    // Replay attack check
+    // The token is bound to the script whose checkpoints were completed; it must not be
+    // redeemable for a key on a different script.
+    if (
+      payload.scriptId &&
+      payload.scriptId !== "all" &&
+      scriptId &&
+      scriptId !== "all" &&
+      payload.scriptId !== scriptId
+    ) {
+      return { valid: false, error: "Claim token was issued for a different script." };
+    }
+
+    // Replay attack check (per-instance fast path; the claim route also consumes the token in
+    // the database via dbService.consumeClaimToken so replay protection holds across instances)
     if (consumedClaimTokens.has(claimToken)) {
       return { valid: false, error: "This claim authorization token has already been consumed." };
     }
@@ -494,6 +525,6 @@ export const antiBypassService = {
       if (first) consumedClaimTokens.delete(first);
     }
 
-    return { valid: true };
+    return { valid: true, tokenId: claimToken.split(".")[1] };
   },
 };

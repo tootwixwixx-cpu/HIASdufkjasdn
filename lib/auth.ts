@@ -1,17 +1,23 @@
 // lib/auth.ts
 import { cookies, headers } from "next/headers";
-import { hmacSha256, constantTimeEquals } from "@/lib/crypto-util";
+import { constantTimeEquals } from "@/lib/crypto-util";
+import { dbService } from "@/lib/store";
+import {
+  AUTH_COOKIE_NAME,
+  SESSION_MAX_AGE_MS,
+  SESSION_HOURS,
+  isValidSessionToken,
+  parseSessionToken,
+  sessionHash,
+  signSessionToken,
+} from "@/lib/auth-token";
+
+export { AUTH_COOKIE_NAME, SESSION_HOURS, isValidSessionToken };
 
 // SECURITY: these must come from the environment. There is deliberately no hardcoded
-// fallback here anymore — a previous version of this file fell back to a known,
-// hardcoded admin username/password/HMAC secret (and a permanent legacy bypass token)
-// whenever the env vars were unset, which meant anyone with this source code could log
-// in as admin or forge a valid session. If any of these are missing, auth fails closed.
+// fallback here — if any are missing, auth fails closed.
 export const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
 export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-
-export const AUTH_COOKIE_NAME = "aero_admin_session";
-
 const AUTH_SECRET = process.env.AUTH_SECRET || "";
 
 function secretsConfigured(): boolean {
@@ -25,83 +31,70 @@ function secretsConfigured(): boolean {
   return true;
 }
 
-/**
- * Validates admin username and password against environment-configured credentials.
- * Fails closed (returns false) if the required env vars aren't set.
- */
+/** Validates admin username and password against environment-configured credentials (constant time). */
 export function verifyCredentials(user: string, pass: string): boolean {
   if (!secretsConfigured()) return false;
   if (!user || !pass) return false;
-  return constantTimeEquals(user, ADMIN_USERNAME) && constantTimeEquals(pass, ADMIN_PASSWORD);
+  const userOk = constantTimeEquals(user, ADMIN_USERNAME);
+  const passOk = constantTimeEquals(pass, ADMIN_PASSWORD);
+  return userOk && passOk;
 }
 
 /**
- * Generates a cryptographically signed admin session token with timestamp.
- * Token format: <timestamp>.<signature>
+ * Creates a server-side, revocable admin session and returns its signed token.
+ * The session row lives in `admin_sessions`; deleting/deactivating it logs that device out immediately.
  */
-export function createSessionToken(): string {
-  const timestamp = Date.now().toString();
-  const signature = hmacSha256(AUTH_SECRET, `aero_admin:${timestamp}`);
-  return `${timestamp}.${signature}`;
+export async function createAdminSession(meta: { ip?: string; userAgent?: string }): Promise<{ token: string }> {
+  const sid = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  await dbService.createAdminSession({
+    token_hash: sessionHash(sid),
+    admin_username: ADMIN_USERNAME,
+    ip_address: meta.ip || null,
+    device_info: (meta.userAgent || "").slice(0, 200) || null,
+    expires_at: new Date(Date.now() + SESSION_MAX_AGE_MS).toISOString(),
+  });
+  return { token: signSessionToken(sid) };
+}
+
+/** Revokes the session that owns `token` (no-op if the token is invalid). */
+export async function revokeSessionToken(token: string | undefined | null): Promise<void> {
+  const parsed = parseSessionToken(token);
+  if (parsed) await dbService.revokeAdminSession(sessionHash(parsed.sid));
+}
+
+async function tokenIsLive(token: string | undefined | null): Promise<boolean> {
+  const parsed = parseSessionToken(token);
+  if (!parsed) return false;
+  return dbService.isAdminSessionLive(sessionHash(parsed.sid));
 }
 
 /**
- * Verifies if a given token is a valid, unexpired session token.
- * Max token age: 7 days. Fails closed if AUTH_SECRET isn't configured.
- */
-export function isValidSessionToken(token: string | undefined | null): boolean {
-  if (!token || typeof token !== "string") return false;
-  if (!AUTH_SECRET) return false;
-
-  const parts = token.split(".");
-  if (parts.length !== 2) return false;
-
-  const [timestampStr, signature] = parts;
-  const timestamp = parseInt(timestampStr, 10);
-  if (isNaN(timestamp)) return false;
-
-  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-  if (Date.now() - timestamp > SEVEN_DAYS_MS || Date.now() < timestamp - 60000) {
-    return false;
-  }
-
-  const expectedSignature = hmacSha256(AUTH_SECRET, `aero_admin:${timestampStr}`);
-
-  return constantTimeEquals(signature, expectedSignature);
-}
-
-/**
- * Checks whether the current request is authenticated as admin via Authorization header or cookies.
- * Next.js 15+/16 made `headers()`/`cookies()` async, so this is now async too — all call sites
- * must `await` it.
+ * Checks whether the current request is an authenticated, non-revoked admin via Authorization header
+ * or cookie. All call sites must `await` it.
  */
 export async function isAuthenticated(req?: Request): Promise<boolean> {
   try {
-    // 1. Direct request parameter check
     if (req) {
       const authHeader = req.headers.get("authorization");
       if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.substring(7).trim();
-        if (isValidSessionToken(token)) return true;
+        if (await tokenIsLive(authHeader.substring(7).trim())) return true;
       }
     }
 
-    // 2. Next.js headers() check
     try {
       const headerStore = await headers();
       const authHeader = headerStore.get("authorization");
       if (authHeader?.startsWith("Bearer ")) {
-        const token = authHeader.substring(7).trim();
-        if (isValidSessionToken(token)) return true;
+        if (await tokenIsLive(authHeader.substring(7).trim())) return true;
       }
     } catch {
       // headers() may throw if called outside request context
     }
 
-    // 3. Fallback to session cookie
     const cookieStore = await cookies();
-    const session = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-    return isValidSessionToken(session);
+    return await tokenIsLive(cookieStore.get(AUTH_COOKIE_NAME)?.value);
   } catch {
     return false;
   }

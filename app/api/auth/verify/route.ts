@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { publicError } from "@/lib/http-errors";
 import { dbService, isStaffReviewKey, type ScriptRecord } from "@/lib/store";
 import { bundleModularScript } from "@/lib/module-bundler";
 import { obfuscateLuauVM, bundleModules } from "@/lib/obfuscator";
@@ -6,7 +7,7 @@ import { wrapPolymorphicLuau } from "@/lib/polymorphic";
 import { syncScriptFromGitHub } from "@/lib/github-sync";
 import { sendExecutionWebhook } from "@/lib/discord-webhook";
 import { getClientIp, normalizeIp, getClientGeo } from "@/lib/ip";
-import { encryptSessionPayload, isNonceReplayed, recordUsedNonce } from "@/lib/crypto-util";
+import { encryptSessionPayload } from "@/lib/crypto-util";
 
 function isMaliciousScraper(userAgent: string): boolean {
   const lower = userAgent.toLowerCase();
@@ -129,8 +130,7 @@ async function lookupIsp(ip: string): Promise<string> {
   return "Generic ISP";
 }
 
-// In-memory sliding cache tracking failed key probes per IP to prevent brute-forcing
-const failedKeyAttempts = new Map<string, { count: number; firstAttempt: number }>();
+// Failed-key probe thresholds (counted in Postgres via dbService.rateLimit)
 const MAX_FAILED_KEY_PROBES = 8;
 const FAILED_KEY_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -205,13 +205,17 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (isNonceReplayed(client_nonce)) {
+    if (client_nonce.length > 128) {
+      return NextResponse.json({ error: "Verification client nonce invalid." }, { status: 400 });
+    }
+    // Postgres-backed so a replay can't be routed to a different serverless instance
+    // (the old per-process Map was empty on every cold start / other instance).
+    if (!(await dbService.consumeNonce("verify:" + client_nonce, 300))) {
       return NextResponse.json(
         { error: "Security Alert: Verification nonce replay detected." },
         { status: 403 }
       );
     }
-    recordUsedNonce(client_nonce);
 
     robloxUser = roblox_username || "Unknown";
     robloxId = roblox_user_id || "N/A";
@@ -378,44 +382,33 @@ export async function POST(req: NextRequest) {
       );
     }
     if (!fetchedKey) {
-      // Sliding window rate limit on failed key attempts to block brute-force / key guessing
-      const now = Date.now();
-      // Periodic pruning to avoid memory leak
-      if (failedKeyAttempts.size > 2000) {
-        const cutoff = now - FAILED_KEY_WINDOW_MS;
-        failedKeyAttempts.forEach((val, k) => {
-          if (val.firstAttempt < cutoff) failedKeyAttempts.delete(k);
-        });
+      // Sliding-window limit on failed key attempts to block brute-force / key guessing.
+      // Postgres-backed (see dbService.rateLimit) so attempts spread across serverless instances
+      // still add up. Same thresholds as before: soft 429 after 5 failures, ban at 8.
+      // rateLimit() returns false once the count EXCEEDS the limit, so limit N blocks the (N+1)th call:
+      // ban on the 8th failure, soft-block from the 5th — identical to the original thresholds.
+      const underBanLimit = await dbService.rateLimit("bad-key-ban", clientIp, MAX_FAILED_KEY_PROBES - 1, FAILED_KEY_WINDOW_MS / 1000);
+      const underSoftLimit = await dbService.rateLimit("bad-key-soft", clientIp, 4, FAILED_KEY_WINDOW_MS / 1000);
+
+      if (!underBanLimit) {
+        await dbService.banIp(
+          clientIp,
+          `Brute-Force Key Guessing Attack (${MAX_FAILED_KEY_PROBES}+ invalid key probes in 5 minutes)`
+        );
+        await logAndNotifyFailure("Brute-Force Key Guessing Attack");
+        return NextResponse.json(
+          {
+            error:
+              "[AERO AUTH] Security Alert: Multiple invalid key attempts detected. Your IP address has been permanently blacklisted.",
+          },
+          { status: 403 }
+        );
       }
-
-      const probeRecord = failedKeyAttempts.get(clientIp);
-      if (!probeRecord || now - probeRecord.firstAttempt > FAILED_KEY_WINDOW_MS) {
-        failedKeyAttempts.set(clientIp, { count: 1, firstAttempt: now });
-      } else {
-        probeRecord.count += 1;
-        // Temporary rate-limit warning before permanent blacklist
-        if (probeRecord.count >= 5 && probeRecord.count < MAX_FAILED_KEY_PROBES) {
-          return NextResponse.json(
-            { error: "Too many failed key attempts. Please wait 5 minutes before trying again." },
-            { status: 429, headers: { "Retry-After": "300" } }
-          );
-        }
-
-        if (probeRecord.count >= MAX_FAILED_KEY_PROBES) {
-          failedKeyAttempts.delete(clientIp);
-          await dbService.banIp(
-            clientIp,
-            `Brute-Force Key Guessing Attack (${probeRecord.count} invalid key probes in 5 minutes)`
-          );
-          await logAndNotifyFailure("Brute-Force Key Guessing Attack");
-          return NextResponse.json(
-            {
-              error:
-                "[AERO AUTH] Security Alert: Multiple invalid key attempts detected. Your IP address has been permanently blacklisted.",
-            },
-            { status: 403 }
-          );
-        }
+      if (!underSoftLimit) {
+        return NextResponse.json(
+          { error: "Too many failed key attempts. Please wait 5 minutes before trying again." },
+          { status: 429, headers: { "Retry-After": "300" } }
+        );
       }
 
       await logAndNotifyFailure("Invalid Key: License key does not exist.");
@@ -425,8 +418,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Reset failed probe attempts on successful key lookup
-    failedKeyAttempts.delete(clientIp);
     const keyRecord = fetchedKey;
 
     const isStaff = isStaffReviewKey(keyRecord);
@@ -797,7 +788,7 @@ export async function POST(req: NextRequest) {
       nonce,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal verification error";
+    const message = publicError(err, "Internal verification error");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -11,7 +11,7 @@ export async function GET() {
     return NextResponse.json({ success: true, words });
   } catch (error: any) {
     console.error("Error fetching blacklist words:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, count: wordsToAdd.length, words: updated });
   } catch (error: any) {
     console.error("Error adding blacklist words:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -69,6 +69,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true, words: updated });
   } catch (error: any) {
     console.error("Error removing blacklist word:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
