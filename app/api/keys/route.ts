@@ -25,8 +25,23 @@ export async function GET() {
   }
   // Automatically purge any expired keys from the pool
   await dbService.purgeExpiredKeys();
-  const keys = await dbService.getKeys();
-  const bannedIps = await dbService.getBannedIps();
+  const [rawKeys, bannedIps, recentIps] = await Promise.all([
+    dbService.getKeys(),
+    dbService.getBannedIps(),
+    dbService.getRecentKeyIps(24),
+  ]);
+  // Attach the 24h IP/country history and a sharing flag (same thresholds as the Discord alert).
+  const keys = rawKeys.map((k) => {
+    const h = recentIps[k.id];
+    const ips24h = h?.ips.length || 0;
+    const countries24h = h?.countries.length || 0;
+    return {
+      ...k,
+      ips_24h: h?.ips || [],
+      countries_24h: h?.countries || [],
+      sharing_flag: ips24h >= 3 || countries24h >= 2,
+    };
+  });
   return NextResponse.json({ keys, banned_ips: bannedIps });
 }
 
@@ -106,8 +121,21 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { id, status, notes } = body;
+    const { id, status, notes, action } = body;
     if (!id) return NextResponse.json({ error: "Missing key id" }, { status: 400 });
+
+    // Admin device reset: no cooldown.
+    if (action === "reset_hwid") {
+      const res = await dbService.resetKeyHwid(String(id), 0);
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: res.reason === "unsupported" ? "Run migration 002 first." : "Key not found." },
+          { status: 400 }
+        );
+      }
+      void dbService.audit("keys.hwid_reset_admin", { target: String(id) });
+      return NextResponse.json({ success: true });
+    }
 
     if (status) {
       // Only the four valid states are accepted (the DB also enforces this with a CHECK constraint).

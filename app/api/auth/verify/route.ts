@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { publicError } from "@/lib/http-errors";
-import { dbService, isStaffReviewKey, type ScriptRecord } from "@/lib/store";
+import { dbService, isStaffReviewKey, HWID_RE, HWID_RESET_COOLDOWN_HOURS, type ScriptRecord } from "@/lib/store";
 import { bundleModularScript } from "@/lib/module-bundler";
 import { obfuscateLuauVM, bundleModules } from "@/lib/obfuscator";
 import { wrapPolymorphicLuau } from "@/lib/polymorphic";
@@ -529,8 +529,54 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. IP Matching: Must match claimed IP (Skipped for staff review keys - infinite users)
+    // 6. Device lock. HWID (device + Roblox account fingerprint from the loader) is the lock; the IP
+    //    is recorded as a second signal and alerts on likely key sharing, but a new IP is allowed
+    //    (mobile data / dynamic IPs). Staff review keys are unbound by design.
+    let hwidMode: "hwid" | "legacy-ip" = "hwid";
     if (!isStaff) {
+      const hwidStr = typeof hwid === "string" ? hwid.trim() : "";
+      if (!HWID_RE.test(hwidStr)) {
+        await logAndNotifyFailure("Missing or malformed device fingerprint (HWID)");
+        return NextResponse.json(
+          { error: "[AERO AUTH] Could not identify your device. Please re-execute the loader." },
+          { status: 400 }
+        );
+      }
+      const binding = await dbService.bindKeyHwid(keyRecord.id, hwidStr);
+      if (binding === "mismatch") {
+        await logAndNotifyFailure("HWID Mismatch (key locked to another device/account)");
+        return NextResponse.json(
+          {
+            error:
+              "Device Mismatch! This key is locked to another device or Roblox account. " +
+              `You can move it to this device on the claim page (once every ${HWID_RESET_COOLDOWN_HOURS} hours).`,
+          },
+          { status: 403 }
+        );
+      }
+      if (binding === "unsupported") {
+        hwidMode = "legacy-ip"; // migration 002 not applied yet: keep the old IP lock below
+      } else {
+        const ipStats = await dbService.recordKeyIp(keyRecord.id, normalizeIp(clientIp), clientGeo.country);
+        if (ipStats && (ipStats.ips_24h >= 3 || ipStats.countries_24h >= 2)) {
+          void adminAlert(
+            "key_sharing",
+            "Possible key sharing",
+            {
+              Key: `****-${keyLast4}`,
+              "IPs (24h)": ipStats.ips_24h,
+              "Countries (24h)": ipStats.countries_24h,
+              Latest: `${clientIp} ${clientGeo.country || ""}`.trim(),
+              Player: `${robloxUser} (${robloxId})`,
+            },
+            { dedupKey: keyRecord.id, windowSec: 6 * 3600 }
+          );
+        }
+      }
+    }
+
+    // Legacy IP lock — only used until migration 002 (HWID binding) is applied.
+    if (!isStaff && hwidMode === "legacy-ip") {
       const normalizedClaimed = normalizeIp(keyRecord.claimed_ip);
       const normalizedClient = normalizeIp(clientIp);
 

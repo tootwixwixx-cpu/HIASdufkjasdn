@@ -127,7 +127,16 @@ export interface KeyRecord {
   is_staff_review?: boolean;
   notes?: string | null;
   ip_reset_at?: string | null;
+  bound_hwid?: string | null;
+  hwid_bound_at?: string | null;
+  hwid_reset_at?: string | null;
+  last_ip?: string | null;
+  last_seen_at?: string | null;
 }
+
+/** In-game device fingerprint produced by the loader: 16 hex chars + "_" + up to 40 printable chars. */
+export const HWID_RE = /^[a-f0-9]{16}_[!-~]{1,40}$/;
+export const HWID_RESET_COOLDOWN_HOURS = 12;
 
 export function isStaffReviewKey(k: KeyRecord | null | undefined): boolean {
   if (!k) return false;
@@ -1832,6 +1841,60 @@ export const dbService = {
   /** Single-use claim-token consumption. Returns true if this is the first use. */
   async consumeClaimToken(tokenId: string, ttlSeconds: number = 900): Promise<boolean> {
     return this.consumeNonce("claim:" + tokenId, ttlSeconds);
+  },
+
+  // --- HWID licensing ---
+
+  /**
+   * Trust-on-first-use device binding.
+   * "bound" = this call bound it, "match" = already bound to this HWID, "mismatch" = bound to another
+   * device, "unsupported" = migration 002 not applied yet (caller falls back to legacy IP binding).
+   */
+  async bindKeyHwid(keyId: string, hwid: string): Promise<"bound" | "match" | "mismatch" | "unsupported"> {
+    if (!isSupabaseConfigured || !supabase) return "unsupported";
+    const { data, error } = await supabase.rpc("bind_key_hwid", { p_key_id: keyId, p_hwid: hwid });
+    if (error) {
+      if (error.code === "PGRST202" || error.code === "42883") return "unsupported";
+      throw new Error("HWID binding failed: " + error.message);
+    }
+    if (Array.isArray(data) && data.length > 0) return "bound";
+    const { data: row } = await supabase.from("keys").select("bound_hwid").eq("id", keyId).maybeSingle();
+    return row?.bound_hwid === hwid ? "match" : "mismatch";
+  },
+
+  /** Records a successful use from an IP. Returns distinct IPs/countries for this key in 24h. */
+  async recordKeyIp(keyId: string, ip: string, country?: string | null): Promise<{ ips_24h: number; countries_24h: number } | null> {
+    if (!isSupabaseConfigured || !supabase) return null;
+    const { data, error } = await supabase.rpc("record_key_ip", { p_key_id: keyId, p_ip: ip, p_country: country || "" });
+    if (error) return null;
+    return data as { ips_24h: number; countries_24h: number };
+  },
+
+  /** Clears a key's device binding. Players get a cooldown; admins pass cooldownHours = 0. */
+  async resetKeyHwid(keyId: string, cooldownHours: number): Promise<{ ok: boolean; reason?: string; retry_at?: string }> {
+    if (!isSupabaseConfigured || !supabase) return { ok: false, reason: "unsupported" };
+    const { data, error } = await supabase.rpc("reset_key_hwid", { p_key_id: keyId, p_cooldown_hours: cooldownHours });
+    if (error) return { ok: false, reason: error.code === "PGRST202" ? "unsupported" : "error" };
+    return data as { ok: boolean; reason?: string; retry_at?: string };
+  },
+
+  /** IP history for keys seen in the last `hours` (for the keys dashboard). */
+  async getRecentKeyIps(hours = 24): Promise<Record<string, { ips: string[]; countries: string[] }>> {
+    const out: Record<string, { ips: string[]; countries: string[] }> = {};
+    if (!isSupabaseConfigured || !supabase) return out;
+    const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from("key_ip_history")
+      .select("key_id, ip, country")
+      .gte("last_seen", since)
+      .limit(5000);
+    if (error || !data) return out;
+    for (const r of data as { key_id: string; ip: string; country: string | null }[]) {
+      const e = (out[r.key_id] ||= { ips: [], countries: [] });
+      if (!e.ips.includes(r.ip)) e.ips.push(r.ip);
+      if (r.country && !e.countries.includes(r.country)) e.countries.push(r.country);
+    }
+    return out;
   },
 
   // --- Admin sessions (server-side, revocable) ---

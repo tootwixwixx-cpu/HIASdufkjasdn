@@ -3,6 +3,8 @@ import { publicError } from "@/lib/http-errors";
 import { dbService } from "@/lib/store";
 import { getClientIp } from "@/lib/ip";
 import { antiBypassService, createSignedToken, verifySignedToken } from "@/lib/anti-bypass";
+import { HWID_RE, HWID_RESET_COOLDOWN_HOURS } from "@/lib/store";
+import { adminAlert } from "@/lib/alerts";
 
 // Per-key proof-of-ownership cookie so the full key is only re-shown to the browser that claimed it.
 function claimCookieName(keyId: string): string {
@@ -134,7 +136,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "checkpoint_started" });
     }
 
-    // Handle self-service Dynamic IP Reset (12h cooldown)
+    // Self-service device (HWID) reset with a 12h cooldown. Clears the binding; the key re-binds to
+    // whichever device + Roblox account runs it next.
+    if (action === "reset_hwid") {
+      const { key } = body;
+      if (!key || typeof key !== "string" || !/^[A-Za-z0-9_-]{6,64}$/.test(key.trim())) {
+        return NextResponse.json({ error: "A valid license key is required." }, { status: 400 });
+      }
+      const keyRec = await dbService.getKeyByString(key.trim().toUpperCase());
+      if (!keyRec || keyRec.status === "banned") {
+        return NextResponse.json({ error: "License key not found." }, { status: 404 });
+      }
+      if (await dbService.isIpBanned(ip)) {
+        return NextResponse.json({ error: "Access Denied." }, { status: 403 });
+      }
+      const res = await dbService.resetKeyHwid(keyRec.id, HWID_RESET_COOLDOWN_HOURS);
+      if (!res.ok) {
+        if (res.reason === "cooldown" && res.retry_at) {
+          const hrs = Math.max(1, Math.ceil((new Date(res.retry_at).getTime() - Date.now()) / 3600000));
+          return NextResponse.json({ error: `You can move this key again in about ${hrs} hour(s).` }, { status: 429 });
+        }
+        return NextResponse.json({ error: "Could not reset the device lock. Please try again later." }, { status: 400 });
+      }
+      void dbService.audit("keys.hwid_reset_self", { target: keyRec.id, ip });
+      void adminAlert(
+        "hwid_reset",
+        "Player moved a key to a new device",
+        { Key: `****-${keyRec.key_string.slice(-4)}`, IP: ip },
+        { dedupKey: keyRec.id, windowSec: 60 }
+      );
+      return NextResponse.json({
+        success: true,
+        message: "Device lock cleared. Run the script on your new device to lock the key to it.",
+      });
+    }
+
+    // Legacy self-service IP rebind (kept for older clients; IP is no longer the lock once HWID binding is live)
     if (action === "reset_ip") {
       const { key } = body;
       if (!key || typeof key !== "string" || !key.trim()) {
@@ -312,6 +349,16 @@ export async function POST(req: NextRequest) {
         },
         { status: 404 }
       );
+    }
+
+    // Pre-bind the device when the claim link came from the in-game loader (its ?id= is the same
+    // fingerprint verify() checks). Otherwise the key binds on its first run.
+    if (HWID_RE.test(hwid)) {
+      try {
+        await dbService.bindKeyHwid(claimedKey.id, hwid);
+      } catch {
+        /* binding falls back to first run */
+      }
     }
 
     // Record checkpoint completion

@@ -47,6 +47,9 @@ import {
   TableToolbar,
 } from "@/components/ui";
 
+// Keys as returned by GET /api/keys (with 24h IP history and the key-sharing flag attached)
+type KeyRow = KeyRecord & { ips_24h?: string[]; countries_24h?: string[]; sharing_flag?: boolean };
+
 function isStaffReviewKey(k: KeyRecord | null | undefined): boolean {
   if (!k) return false;
   return (
@@ -64,7 +67,7 @@ function isLifetimePaidKey(k: KeyRecord | null | undefined): boolean {
 }
 
 export default function KeysPage() {
-  const [keys, setKeys] = useState<KeyRecord[]>([]);
+  const [keys, setKeys] = useState<KeyRow[]>([]);
   const [scripts, setScripts] = useState<ScriptRecord[]>([]);
   const [bannedIps, setBannedIps] = useState<Record<string, { reason: string; banned_at: string }>>({});
   const [loading, setLoading] = useState(true);
@@ -258,6 +261,22 @@ export default function KeysPage() {
       );
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleResetHwid = async (id: string) => {
+    if (!confirm("Reset this key's device lock? It will lock to whichever device runs it next.")) return;
+    try {
+      const res = await fetch("/api/keys", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "reset_hwid" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Reset failed");
+      setKeys((prev) => prev.map((k) => (k.id === id ? { ...k, bound_hwid: null, hwid_bound_at: null } : k)));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Reset failed");
     }
   };
 
@@ -611,12 +630,41 @@ export default function KeysPage() {
 
                     {/* Bound identity */}
                     <TableCell className="py-1">
+                      {!isStaff && (
+                        <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+                          {k.bound_hwid ? (
+                            <>
+                              <span className="font-data text-micro text-fg" title={`Device ${k.bound_hwid}`}>
+                                Device {k.bound_hwid.slice(0, 8)}…
+                              </span>
+                              <Button variant="ghost" size="xs" onClick={() => handleResetHwid(k.id)} title="Clear the device lock">
+                                Reset device
+                              </Button>
+                            </>
+                          ) : (
+                            <span className="text-micro text-fg-subtle">No device yet (locks on first run)</span>
+                          )}
+                          {k.sharing_flag && (
+                            <span
+                              className="rounded border border-warning/40 bg-warning/10 px-1.5 text-micro font-semibold text-warning-text"
+                              title={`Used from ${k.ips_24h?.length || 0} IPs / ${k.countries_24h?.length || 0} countries in 24h`}
+                            >
+                              Possible sharing
+                            </span>
+                          )}
+                          {(k.ips_24h?.length || 0) > 0 && (
+                            <span className="text-micro text-fg-muted" title={(k.ips_24h || []).join(", ")}>
+                              {k.ips_24h!.length} IP{k.ips_24h!.length === 1 ? "" : "s"} / 24h
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {isStaff ? (
                         <span className="text-caption text-fg-muted">Unlimited users</span>
                       ) : k.claimed_ip ? (
                         <div className="flex items-center gap-1.5">
                           <span className={`font-data text-caption ${ipBanned ? "text-danger-text line-through" : "text-fg"}`}>
-                            {k.claimed_ip}
+                            {k.last_ip || k.claimed_ip}
                           </span>
                           {ipBanned && <StatusBadge status="banned" dot={false} />}
                           <Button

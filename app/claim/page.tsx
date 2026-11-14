@@ -285,15 +285,14 @@ export default function ClaimKeyPage() {
       const res = await fetch("/api/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reset_ip", key: claimedKey }),
+        body: JSON.stringify({ action: "reset_hwid", key: claimedKey }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to reset IP");
-      setIpResetStatus({ message: data.message || "IP rebound successfully!", type: "success" });
-      if (data.bound_ip) setBoundIp(data.bound_ip);
+      if (!res.ok) throw new Error(data.error || "Failed to reset device");
+      setIpResetStatus({ message: data.message || "Device lock cleared!", type: "success" });
     } catch (err: unknown) {
       setIpResetStatus({
-        message: err instanceof Error ? err.message : "Failed to reset IP",
+        message: err instanceof Error ? err.message : "Failed to reset device",
         type: "error",
       });
     } finally {
@@ -1549,7 +1548,7 @@ export default function ClaimKeyPage() {
                   </Card>
                 </dl>
 
-                {/* Dynamic IP Reset Self-Service */}
+                {/* Device (HWID) reset self-service: the key re-binds to whichever device runs it next */}
                 <div className="border-t border-line pt-4">
                   <Button
                     variant="secondary"
@@ -1559,8 +1558,11 @@ export default function ClaimKeyPage() {
                     className="w-full"
                   >
                     <RefreshCw className={ipResetting ? "animate-spin motion-reduce:animate-none" : undefined} />
-                    <span>{ipResetting ? "Rebinding IP..." : "Reset bound IP to current location"}</span>
+                    <span>{ipResetting ? "Resetting device lock..." : "Move key to a new device"}</span>
                   </Button>
+                  <p className="mt-1.5 text-center text-caption text-fg-subtle">
+                    Your key locks to the first device and Roblox account that runs it. You can move it once every 12 hours.
+                  </p>
 
                   {ipResetStatus && (
                     <Alert

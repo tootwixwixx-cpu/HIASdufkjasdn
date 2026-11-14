@@ -104,16 +104,20 @@ export async function GET(
     }
 
     if (!isAuthorized && key && /^[A-Za-z0-9_-]{6,64}$/.test(key.trim())) {
-      // Targeted lookup (was: load every key in the table on every module request) and
-      // enforce the same rules as /api/auth/verify: active, not expired, bound to this IP.
+      // Targeted lookup and the same rules as /api/auth/verify: active, not expired, and locked to
+      // this device (x-hwid header / ?hwid= must equal the key's bound HWID). Keys with no device bound
+      // yet (before migration 002) fall back to the old IP binding.
       const validKey = await dbService.getKeyByString(key.trim().toUpperCase());
+      const reqHwid = (req.headers.get("x-hwid") || searchParams.get("hwid") || "").trim();
+      const deviceOk = validKey?.bound_hwid
+        ? reqHwid === validKey.bound_hwid
+        : Boolean(validKey?.claimed_ip && normalizeIp(validKey.claimed_ip) === requestIp);
       if (
         validKey &&
         validKey.status === "active" &&
         (validKey.script_id === "all" || validKey.script_id === script.id) &&
         (!validKey.expires_at || new Date(validKey.expires_at).getTime() > Date.now()) &&
-        validKey.claimed_ip &&
-        normalizeIp(validKey.claimed_ip) === requestIp
+        deviceOk
       ) {
         isAuthorized = true;
       }
