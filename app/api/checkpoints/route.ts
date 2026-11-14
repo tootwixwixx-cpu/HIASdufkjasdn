@@ -11,18 +11,18 @@ export async function GET(req: NextRequest) {
 
     let targetScript = null;
     if (scriptSlug) {
-      targetScript = await dbService.getScriptBySlug(scriptSlug);
+      targetScript = await dbService.getScriptMetaBySlug(scriptSlug);
       if (targetScript) {
         scriptId = targetScript.id;
       }
     } else if (scriptId && scriptId !== "all") {
-      const allScripts = await dbService.getScripts();
+      const allScripts = await dbService.getScriptsLite();
       targetScript = allScripts.find((s) => s.id === scriptId) || null;
     }
 
     // Auto-resolve active script if no specific script or target is identified
     if (!targetScript && (!scriptId || scriptId === "")) {
-      const allScripts = await dbService.getScripts();
+      const allScripts = await dbService.getScriptsLite();
       const active = allScripts.filter((s) => s.is_active !== false);
       const preferred =
         active.find((s) => s.slug === "rivals" || s.slug === "atomware-hub" || s.name.toLowerCase().includes("atom")) ||

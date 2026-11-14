@@ -1,4 +1,4 @@
-// app/api/checkpoints/session/route.ts
+﻿// app/api/checkpoints/session/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { getClientIp } from "@/lib/ip";
@@ -45,12 +45,12 @@ export async function POST(req: NextRequest) {
       let targetScriptId = script_id || "";
 
       if (!targetScriptId && script_slug) {
-        const script = await dbService.getScriptBySlug(script_slug);
+        const script = await dbService.getScriptMetaBySlug(script_slug);
         if (script) targetScriptId = script.id;
       }
 
       if (!targetScriptId) {
-        const allScripts = await dbService.getScripts();
+        const allScripts = await dbService.getScriptsLite();
         const active = allScripts.filter((s) => s.is_active !== false);
         const preferred =
           active.find((s) => s.slug === "rivals" || s.slug === "atomware-hub" || s.name.toLowerCase().includes("atom")) ||
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
 
         const warningMsg =
           lockoutInfo.attemptCount > 0
-            ? `${result.error || "Verification failed."} (Warning: Attempt ${lockoutInfo.attemptCount}/3 — 3 attempts results in permanent lockout)`
+            ? `${result.error || "Verification failed."} (Warning: Attempt ${lockoutInfo.attemptCount}/3 â€” 3 attempts results in permanent lockout)`
             : result.error || "Verification failed.";
 
         return NextResponse.json(

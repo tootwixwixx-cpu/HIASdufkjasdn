@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { getClientIp } from "@/lib/ip";
 import { antiBypassService } from "@/lib/anti-bypass";
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
     let targetScriptId = script_id;
     if (!targetScriptId && script_slug) {
-      const script = await dbService.getScriptBySlug(script_slug);
+      const script = await dbService.getScriptMetaBySlug(script_slug);
       if (script) targetScriptId = script.id;
     }
 
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
     // 3. Resolve target script ID
     let targetScriptId = script_id || "";
     if (!targetScriptId && script_slug) {
-      const script = await dbService.getScriptBySlug(script_slug);
+      const script = await dbService.getScriptMetaBySlug(script_slug);
       if (script) targetScriptId = script.id;
     }
 

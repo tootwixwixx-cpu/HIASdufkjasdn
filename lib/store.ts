@@ -76,6 +76,26 @@ export interface ScriptRecord {
   updated_at: string;
 }
 
+// Columns safe to fetch on hot paths. Excludes the multi-MB payload columns
+// (modules, lua_code, obfuscated_payload) and github_token.
+const SCRIPT_META_COLUMNS =
+  "id,name,slug,entry_file,loader_config_id,watermark_text,show_watermark,is_active,use_auth," +
+  "is_maintenance,maintenance_message,github_repo,github_branch,github_directory,github_auto_pull," +
+  "github_last_commit,github_last_pulled_at,is_obfuscated,obfuscated_at,obfuscation_stats,vm_preset," +
+  "created_at,updated_at";
+
+// Short-lived in-process caches so repeated loader/auth requests don't each hit
+// the database (a single full script row can be ~5 MB).
+const SCRIPT_CACHE_TTL_MS = 5000;
+const scriptBySlugCache = new Map<string, { at: number; value: ScriptRecord | null }>();
+let scriptsLiteCache: { at: number; value: ScriptRecord[] } | null = null;
+const scriptsLiteInflight: { p: Promise<ScriptRecord[]> | null } = { p: null };
+
+function invalidateScriptCaches() {
+  scriptBySlugCache.clear();
+  scriptsLiteCache = null;
+}
+
 export interface KeyRecord {
   id: string;
   key_string: string;
@@ -717,10 +737,74 @@ export const dbService = {
     return local;
   },
 
+  // Metadata-only script list (no modules / payloads / github_token). Use this on
+  // hot paths that only need id, is_active, use_auth, etc.
+  async getScriptsLite(): Promise<ScriptRecord[]> {
+    const now = Date.now();
+    if (scriptsLiteCache && now - scriptsLiteCache.at < SCRIPT_CACHE_TTL_MS) {
+      return scriptsLiteCache.value;
+    }
+    if (scriptsLiteInflight.p) return scriptsLiteInflight.p;
+
+    scriptsLiteInflight.p = (async () => {
+      const local = readLocalDb().scripts;
+      let result: ScriptRecord[] = local;
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from("scripts")
+            .select(SCRIPT_META_COLUMNS)
+            .order("created_at", { ascending: false });
+          if (data && !error && data.length > 0) {
+            result = (data as any[]).map((remote) => {
+              const loc = local.find((l) => l.id === remote.id || l.slug === remote.slug);
+              return {
+                ...loc,
+                ...remote,
+                modules: loc?.modules || {},
+                use_auth: remote.use_auth ?? loc?.use_auth ?? true,
+                loader_config_id: remote.loader_config_id || loc?.loader_config_id || null,
+              } as ScriptRecord;
+            });
+            scriptsLiteCache = { at: Date.now(), value: result };
+          }
+        } catch (err) {
+          console.error("Supabase getScriptsLite error:", err);
+        }
+      }
+      return result;
+    })().finally(() => {
+      scriptsLiteInflight.p = null;
+    });
+    return scriptsLiteInflight.p;
+  },
+
+  // Metadata-only lookup by slug/name (cached list, no payload columns). Falls back
+  // to the full lookup only if nothing matches, to preserve UUID/name fallbacks.
+  async getScriptMetaBySlug(slug: string): Promise<ScriptRecord | null> {
+    if (!slug) return null;
+    const normalized = slug.trim().toLowerCase();
+    const list = await this.getScriptsLite();
+    const hit = list.find(
+      (s) => s.slug.toLowerCase() === normalized || s.name.toLowerCase() === normalized || s.id === slug.trim()
+    );
+    return hit || this.getScriptBySlug(slug);
+  },
+
   async getScriptBySlug(slug: string): Promise<ScriptRecord | null> {
     if (!slug) return null;
     const clean = slug.trim();
     const normalized = clean.toLowerCase();
+
+    const cached = scriptBySlugCache.get(normalized);
+    if (cached && Date.now() - cached.at < SCRIPT_CACHE_TTL_MS) return cached.value;
+    const result = await this._getScriptBySlugUncached(clean, normalized);
+    if (scriptBySlugCache.size > 200) scriptBySlugCache.clear();
+    scriptBySlugCache.set(normalized, { at: Date.now(), value: result });
+    return result;
+  },
+
+  async _getScriptBySlugUncached(clean: string, normalized: string): Promise<ScriptRecord | null> {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean);
 
     const local = readLocalDb().scripts.find(
@@ -729,7 +813,8 @@ export const dbService = {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from("scripts").select("*").ilike("slug", normalized).maybeSingle();
+        // Slugs are always stored lowercase (see saveScript), so an exact match can use the index.
+        const { data, error } = await supabase.from("scripts").select("*").eq("slug", normalized).maybeSingle();
         if (data && !error) {
           return {
             ...local,
@@ -854,6 +939,7 @@ export const dbService = {
       }
     }
 
+    invalidateScriptCaches();
     return record;
   },
 
@@ -865,6 +951,7 @@ export const dbService = {
         console.error("Supabase deleteScript error:", err);
       }
     }
+    invalidateScriptCaches();
     const db = readLocalDb();
     const target = db.scripts.find((s) => s.id === id);
     if (target && target.slug) {
@@ -957,6 +1044,7 @@ export const dbService = {
         console.warn("Supabase update protected payload fallback:", err);
       }
     }
+    invalidateScriptCaches();
   },
 
   // Keys

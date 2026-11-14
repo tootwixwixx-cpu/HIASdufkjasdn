@@ -1,4 +1,4 @@
-// app/api/auth/probe/route.ts
+﻿// app/api/auth/probe/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { dbService } from "@/lib/store";
 import { generateLuaLoader } from "@/lib/lua-generator";
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Script slug required." }, { status: 400 });
   }
 
-  const script = await dbService.getScriptBySlug(slug);
+  const script = await dbService.getScriptMetaBySlug(slug);
   if (!script) {
     return NextResponse.json({ error: "Script not found." }, { status: 404 });
   }
@@ -125,14 +125,14 @@ export async function GET(req: NextRequest) {
  * Evaluates client attestation and delivers Gateway Access Token + Encrypted Auth Loader.
  *
  * False-Positive Protection Matrix:
- * ┌──────────────────────────────────┬─────────────────────┬─────────────────────────┐
- * │ Scenario                         │ Hard Flags          │ Server Action           │
- * ├──────────────────────────────────┼─────────────────────┼─────────────────────────┤
- * │ Normal executor API present      │ 0 (not flagged)     │ Pass — proceed normally │
- * │ Ambiguous / single soft signal   │ 0-1 hard flag       │ Log only — still pass   │
- * │ Dual-confirmed spy tool active   │ 2 hard flags        │ Soft block — no ban     │
- * │ Triple-confirmed active attack   │ 3+ hard flags       │ Hard block + log bypass │
- * └──────────────────────────────────┴─────────────────────┴─────────────────────────┘
+ * â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+ * â”‚ Scenario                         â”‚ Hard Flags          â”‚ Server Action           â”‚
+ * â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+ * â”‚ Normal executor API present      â”‚ 0 (not flagged)     â”‚ Pass â€” proceed normally â”‚
+ * â”‚ Ambiguous / single soft signal   â”‚ 0-1 hard flag       â”‚ Log only â€” still pass   â”‚
+ * â”‚ Dual-confirmed spy tool active   â”‚ 2 hard flags        â”‚ Soft block â€” no ban     â”‚
+ * â”‚ Triple-confirmed active attack   â”‚ 3+ hard flags       â”‚ Hard block + log bypass â”‚
+ * â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
  */
 export async function POST(req: NextRequest) {
   cleanupOldSessions();
@@ -163,9 +163,9 @@ export async function POST(req: NextRequest) {
       const { hardCount, isDualConfirmed, isBanworthy, flagSummary } = classifyFlags(tamper_flags);
 
       if (isBanworthy) {
-        // 3+ distinct hard signals = active confirmed attack → log bypass attempt
+        // 3+ distinct hard signals = active confirmed attack â†’ log bypass attempt
         console.warn(`[Security] Hard block: ${clientIp} | Flags: ${flagSummary}`);
-        // Fire-and-forget — do not await, do not let this slow down legitimate users
+        // Fire-and-forget â€” do not await, do not let this slow down legitimate users
         dbService.recordBypassAttempt(
           clientIp,
           hwid || null,
@@ -188,9 +188,9 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // 0-1 hard flags = ambiguous single signal, likely executor quirk — allow through, log softly
+      // 0-1 hard flags = ambiguous single signal, likely executor quirk â€” allow through, log softly
       console.info(`[Security] Soft flag (ignored): ${clientIp} | Flags: ${tamper_flags.join(", ")} | Hard: ${hardCount}`);
-      // Deliberately fall through and allow access — no block, no ban record
+      // Deliberately fall through and allow access â€” no block, no ban record
     }
 
     // 2. Validate arithmetic challenge solution
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
     });
 
     // 4. Retrieve Script & Loader Config
-    const script = await dbService.getScriptBySlug(slug);
+    const script = await dbService.getScriptMetaBySlug(slug);
     if (!script) {
       return NextResponse.json({ error: "Script not found." }, { status: 404 });
     }

@@ -554,8 +554,10 @@ export async function POST(req: NextRequest) {
     // 7. Fetch Script if not already resolved
     if (!script) {
       if (keyRecord.script_id && keyRecord.script_id !== "all") {
-        const allScripts = await dbService.getScripts();
-        script = allScripts.find((s) => s.id === keyRecord.script_id) || null;
+        const allScripts = await dbService.getScriptsLite();
+        const meta = allScripts.find((s) => s.id === keyRecord.script_id) || null;
+        // Full record (modules etc.) is needed below; fetch it by indexed slug (cached).
+        script = meta ? (await dbService.getScriptBySlug(meta.slug)) || meta : null;
       }
       if (script) {
         targetScriptName = script.name;
@@ -575,7 +577,7 @@ export async function POST(req: NextRequest) {
 
     // 7b. Script-Specific Key Isolation: Ensure key claimed for Script A cannot be used on Script B (unless assigned to "all")
     if (keyRecord.script_id && keyRecord.script_id !== "all" && script.id && keyRecord.script_id !== script.id) {
-      const allScripts = await dbService.getScripts();
+      const allScripts = await dbService.getScriptsLite();
       const claimedForScript = allScripts.find((s) => s.id === keyRecord.script_id);
       const claimedForName = claimedForScript ? claimedForScript.name : "another script";
       const reason = "Script Mismatch (Key claimed for different script)";
