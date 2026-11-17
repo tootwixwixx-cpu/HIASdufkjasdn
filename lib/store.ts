@@ -179,6 +179,41 @@ export interface ScriptVersion {
   created_at: string;
 }
 
+// Changelogs: written by the script owner when they push an update, shown to players once, after key
+// verification and before the script starts (see showChangelog in lib/lua-generator.ts).
+export const CHANGELOG_TYPES = ["added", "fixed", "changed", "improved", "removed"] as const;
+export type ChangelogType = (typeof CHANGELOG_TYPES)[number];
+export interface ChangelogEntry {
+  type: ChangelogType;
+  text: string;
+}
+export interface ScriptChangelog {
+  id: string;
+  script_id: string;
+  title: string | null;
+  entries: ChangelogEntry[];
+  created_at: string;
+}
+/** A changelog older than this is not shown to players who never saw it (e.g. a brand-new user). */
+export const CHANGELOG_MAX_AGE_DAYS = 30;
+const changelogCache = new Map<string, { at: number; value: ScriptChangelog | null }>();
+const CHANGELOG_CACHE_TTL_MS = 30_000;
+
+/** Validates/normalizes owner input. Returns null if there is nothing valid to save. */
+export function sanitizeChangelogEntries(input: unknown): ChangelogEntry[] | null {
+  if (!Array.isArray(input)) return null;
+  const out: ChangelogEntry[] = [];
+  for (const raw of input.slice(0, 30)) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as { type?: unknown; text?: unknown };
+    const text = typeof r.text === "string" ? r.text.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+    if (!text) continue;
+    const type = (CHANGELOG_TYPES as readonly string[]).includes(String(r.type)) ? (r.type as ChangelogType) : "changed";
+    out.push({ type, text });
+  }
+  return out.length ? out : null;
+}
+
 export interface AnalyticsInsights {
   unavailable: boolean;
   days: number;
@@ -2048,6 +2083,63 @@ export const dbService = {
     invalidateScriptCaches();
     await this.snapshotScript(updated.slug, `Restored from v${v.version}`);
     return { slug: updated.slug, version: v.version };
+  },
+
+  // --- Script changelogs (see migration 003) ---
+
+  /**
+   * The newest changelog for a script, or null. Never throws: if migration 003 has not been applied yet the
+   * table is missing and this simply returns null, so key verification keeps working.
+   */
+  async getLatestChangelog(scriptId: string): Promise<ScriptChangelog | null> {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(scriptId)) return null;
+    const hit = changelogCache.get(scriptId);
+    if (hit && Date.now() - hit.at < CHANGELOG_CACHE_TTL_MS) return hit.value;
+    const since = new Date(Date.now() - CHANGELOG_MAX_AGE_DAYS * 86400 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from("script_changelogs")
+      .select("id, script_id, title, entries, created_at")
+      .eq("script_id", scriptId)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const value = error || !data ? null : (data as ScriptChangelog);
+    changelogCache.set(scriptId, { at: Date.now(), value });
+    return value;
+  },
+
+  async listChangelogs(scriptId: string, limit = 20): Promise<ScriptChangelog[]> {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(scriptId)) return [];
+    const { data, error } = await supabase
+      .from("script_changelogs")
+      .select("id, script_id, title, entries, created_at")
+      .eq("script_id", scriptId)
+      .order("created_at", { ascending: false })
+      .limit(Math.max(1, Math.min(100, Math.floor(limit))));
+    return error ? [] : ((data || []) as ScriptChangelog[]);
+  },
+
+  async addChangelog(scriptId: string, title: string | null, entries: ChangelogEntry[]): Promise<ScriptChangelog> {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(scriptId)) throw new Error("Not available");
+    const { data, error } = await supabase
+      .from("script_changelogs")
+      .insert({ script_id: scriptId, title: title ? String(title).trim().slice(0, 60) || null : null, entries })
+      .select("id, script_id, title, entries, created_at")
+      .single();
+    if (error || !data) {
+      const missing = error?.code === "42P01" || error?.code === "PGRST205";
+      throw new Error(missing ? "Changelog table is missing. Run migration/003_changelogs.sql first." : error?.message || "Could not save changelog");
+    }
+    changelogCache.delete(scriptId);
+    return data as ScriptChangelog;
+  },
+
+  async deleteChangelog(id: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase || !UUID_RE.test(id)) throw new Error("Not available");
+    const { error } = await supabase.from("script_changelogs").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    changelogCache.clear();
   },
 
   // --- Analytics insights (aggregated in Postgres; see migration 002) ---

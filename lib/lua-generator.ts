@@ -923,6 +923,177 @@ end)
     : ""
 }
 -- =======================================================
+-- WHAT'S NEW: changelog shown once per update, after the key is verified and before the script starts.
+-- The server attaches the newest changelog (if the owner wrote one) to the verify response; the id of the
+-- one the player last dismissed is kept in AtomProtect/<slug>_changelog.txt so it is never shown twice.
+-- Blocks until the player presses Continue. Every failure path falls through so it can never stop the script.
+-- =======================================================
+local function showChangelog(cl)
+    if _type(cl) ~= "table" or _type(cl.entries) ~= "table" or #cl.entries == 0 then return end
+    local clId = _tostring(cl.id or "")
+    local seenPath = "AtomProtect/" .. SCRIPT_SLUG .. "_changelog.txt"
+    local alreadySeen = false
+    pcall(function()
+        if clId ~= "" and isfile and readfile and isfile(seenPath) then
+            alreadySeen = (readfile(seenPath):gsub("%s+", "") == clId)
+        end
+    end)
+    if alreadySeen then return end
+
+    local ok = pcall(function()
+        local BG = Color3.fromRGB(${bg.r}, ${bg.g}, ${bg.b})
+        local FG = Color3.fromRGB(${text.r}, ${text.g}, ${text.b})
+        local DIM = Color3.fromRGB(${subtext.r}, ${subtext.g}, ${subtext.b})
+        local LINE = Color3.fromRGB(${card.r}, ${card.g}, ${card.b})
+        local TAGS = { added = "ADDED", fixed = "FIXED", changed = "CHANGED", improved = "IMPROVED", removed = "REMOVED" }
+
+        local Gui = Instance.new("ScreenGui")
+        Gui.Name = "AeroAuthChangelog"
+        Gui.ResetOnSpawn = false
+        Gui.IgnoreGuiInset = true
+        Gui.DisplayOrder = 1000000
+        Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        pcall(function()
+            if gethui then Gui.Parent = gethui() else Gui.Parent = CoreGui end
+        end)
+        if not Gui.Parent then Gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+        local cam = workspace.CurrentCamera
+        local vp = (cam and cam.ViewportSize) or Vector2.new(800, 600)
+        local W = _math.clamp(vp.X - 32, 240, 380)
+        local H = _math.clamp(vp.Y - 48, 200, 400)
+
+        local Dim = Instance.new("Frame")
+        Dim.Size = UDim2.fromScale(1, 1)
+        Dim.BackgroundColor3 = Color3.new(0, 0, 0)
+        Dim.BackgroundTransparency = 0.45
+        Dim.BorderSizePixel = 0
+        Dim.Active = true
+        Dim.Parent = Gui
+
+        local Card = Instance.new("Frame")
+        Card.AnchorPoint = Vector2.new(0.5, 0.5)
+        Card.Position = UDim2.fromScale(0.5, 0.5)
+        Card.Size = UDim2.fromOffset(W, H)
+        Card.BackgroundColor3 = BG
+        Card.BorderSizePixel = 0
+        Card.Parent = Dim
+        local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(0, 8); cc.Parent = Card
+        local cs = Instance.new("UIStroke"); cs.Color = DIM; cs.Transparency = 0.7; cs.Thickness = 1; cs.Parent = Card
+
+        local Eyebrow = Instance.new("TextLabel")
+        Eyebrow.BackgroundTransparency = 1
+        Eyebrow.Position = UDim2.fromOffset(16, 14)
+        Eyebrow.Size = UDim2.new(1, -32, 0, 14)
+        Eyebrow.Font = boldFont
+        Eyebrow.Text = "WHAT'S NEW"
+        Eyebrow.TextSize = 11
+        Eyebrow.TextColor3 = DIM
+        Eyebrow.TextXAlignment = Enum.TextXAlignment.Left
+        Eyebrow.Parent = Card
+
+        local Title = Instance.new("TextLabel")
+        Title.BackgroundTransparency = 1
+        Title.Position = UDim2.fromOffset(16, 30)
+        Title.Size = UDim2.new(1, -32, 0, 24)
+        Title.Font = boldFont
+        Title.Text = _string.sub(_tostring(cl.title or "Latest update"), 1, 60)
+        Title.TextSize = 18
+        Title.TextColor3 = FG
+        Title.TextXAlignment = Enum.TextXAlignment.Left
+        Title.TextTruncate = Enum.TextTruncate.AtEnd
+        Title.Parent = Card
+
+        local Rule = Instance.new("Frame")
+        Rule.Position = UDim2.fromOffset(16, 62)
+        Rule.Size = UDim2.new(1, -32, 0, 1)
+        Rule.BackgroundColor3 = LINE
+        Rule.BorderSizePixel = 0
+        Rule.Parent = Card
+
+        local List = Instance.new("ScrollingFrame")
+        List.BackgroundTransparency = 1
+        List.BorderSizePixel = 0
+        List.Position = UDim2.fromOffset(16, 72)
+        List.Size = UDim2.new(1, -32, 1, -72 - 62)
+        List.CanvasSize = UDim2.new()
+        List.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        List.ScrollBarThickness = 3
+        List.ScrollBarImageColor3 = DIM
+        List.Parent = Card
+        local Layout = Instance.new("UIListLayout")
+        Layout.Padding = UDim.new(0, 10)
+        Layout.SortOrder = Enum.SortOrder.LayoutOrder
+        Layout.Parent = List
+
+        for i, entry in ipairs(cl.entries) do
+            if i > 30 then break end
+            if _type(entry) == "table" and _type(entry.text) == "string" and entry.text ~= "" then
+                local Row = Instance.new("Frame")
+                Row.BackgroundTransparency = 1
+                Row.Size = UDim2.new(1, -6, 0, 0)
+                Row.AutomaticSize = Enum.AutomaticSize.Y
+                Row.LayoutOrder = i
+                Row.Parent = List
+
+                local Tag = Instance.new("TextLabel")
+                Tag.BackgroundTransparency = 1
+                Tag.Position = UDim2.fromOffset(0, 2)
+                Tag.Size = UDim2.fromOffset(60, 14)
+                Tag.Font = boldFont
+                Tag.Text = TAGS[entry.type] or "CHANGED"
+                Tag.TextSize = 10
+                Tag.TextColor3 = DIM
+                Tag.TextXAlignment = Enum.TextXAlignment.Left
+                Tag.Parent = Row
+
+                local Body = Instance.new("TextLabel")
+                Body.BackgroundTransparency = 1
+                Body.Position = UDim2.fromOffset(64, 0)
+                Body.Size = UDim2.new(1, -64, 0, 0)
+                Body.AutomaticSize = Enum.AutomaticSize.Y
+                Body.Font = appFont
+                Body.RichText = false
+                Body.Text = _string.sub(entry.text, 1, 200)
+                Body.TextSize = 13
+                Body.TextColor3 = FG
+                Body.TextWrapped = true
+                Body.TextXAlignment = Enum.TextXAlignment.Left
+                Body.TextYAlignment = Enum.TextYAlignment.Top
+                Body.Parent = Row
+            end
+        end
+
+        local Btn = Instance.new("TextButton")
+        Btn.AnchorPoint = Vector2.new(0, 1)
+        Btn.Position = UDim2.new(0, 16, 1, -16)
+        Btn.Size = UDim2.new(1, -32, 0, 36)
+        Btn.BackgroundColor3 = FG
+        Btn.BorderSizePixel = 0
+        Btn.AutoButtonColor = true
+        Btn.Font = boldFont
+        Btn.Text = "CONTINUE"
+        Btn.TextSize = 13
+        Btn.TextColor3 = BG
+        Btn.Parent = Card
+        local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 6); bc.Parent = Btn
+
+        local done = false
+        Btn.Activated:Connect(function() done = true end)
+        while not done do task.wait(0.1) end
+        pcall(function() Gui:Destroy() end)
+    end)
+
+    -- remember it only if it was actually shown and dismissed
+    if ok then
+        pcall(function()
+            if makefolder and isfolder and not isfolder("AtomProtect") then makefolder("AtomProtect") end
+            if writefile and clId ~= "" then writefile(seenPath, clId) end
+        end)
+    end
+end
+
+-- =======================================================
 -- BACKGROUND TELEMETRY, WATERMARK & COMMAND RUNTIME
 -- =======================================================
 local function startProtectedRuntime(sessionToken, payloadData, isAdminKey, initialRemainingSeconds, nonce, userKey)
@@ -1502,6 +1673,11 @@ ${
             finalCode = nil
             return
         end
+    end
+
+    -- What's new: shown once per update, after auth and before the main script initializes
+    if _type(payloadData) == "table" and payloadData.changelog then
+        pcall(showChangelog, payloadData.changelog)
     end
 
     local runPayload, loadErr = _loadstring(finalCode)

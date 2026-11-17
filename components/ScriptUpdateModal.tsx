@@ -67,6 +67,13 @@ export default function ScriptUpdateModal({
   const [error, setError] = useState<string | null>(null);
   const [copiedLoadstring, setCopiedLoadstring] = useState(false);
 
+  // Changelog prompt shown after a successful update: ask -> (write entries) -> done
+  type ChangelogDraft = { type: "added" | "fixed" | "changed" | "improved" | "removed"; text: string };
+  const [clStage, setClStage] = useState<"idle" | "ask" | "edit" | "saving" | "done">("idle");
+  const [clTitle, setClTitle] = useState("");
+  const [clEntries, setClEntries] = useState<ChangelogDraft[]>([{ type: "added", text: "" }]);
+  const [clError, setClError] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
   const bulkFolderInputRef = useRef<HTMLInputElement>(null);
@@ -96,6 +103,10 @@ export default function ScriptUpdateModal({
       setIsAddingFile(false);
       setNewFileNameInput("");
       setBulkAddMsg(null);
+      setClStage("idle");
+      setClTitle("");
+      setClEntries([{ type: "added", text: "" }]);
+      setClError(null);
     }
   }, [script, isOpen]);
 
@@ -323,6 +334,10 @@ export default function ScriptUpdateModal({
       setOriginalMap({ ...modulesMap });
       setUploadedFileName(null);
       setSaveSuccess(`Script updated & re-obfuscated with Luau VM! Loadstring remains locked and active.`);
+      setClStage("ask");
+      setClTitle("");
+      setClEntries([{ type: "added", text: "" }]);
+      setClError(null);
       onScriptUpdated(data.script);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error saving updates";
@@ -331,6 +346,33 @@ export default function ScriptUpdateModal({
       setIsSaving(false);
     }
   };
+
+  const handleSaveChangelog = async () => {
+    if (!script) return;
+    const entries = clEntries.map((e) => ({ type: e.type, text: e.text.trim() })).filter((e) => e.text);
+    if (entries.length === 0) {
+      setClError("Write at least one entry, or skip.");
+      return;
+    }
+    setClStage("saving");
+    setClError(null);
+    try {
+      const res = await fetch("/api/scripts/changelog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ script_id: script.id, title: clTitle.trim() || null, entries }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save changelog");
+      setClStage("done");
+    } catch (err: unknown) {
+      setClError(err instanceof Error ? err.message : "Could not save changelog");
+      setClStage("edit");
+    }
+  };
+
+  const updateClEntry = (i: number, patch: Partial<ChangelogDraft>) =>
+    setClEntries((prev) => prev.map((e, idx) => (idx === i ? { ...e, ...patch } : e)));
 
   const lineCount = currentContent.split("\n").length;
   const byteSize = new Blob([currentContent]).size;
@@ -402,6 +444,107 @@ export default function ScriptUpdateModal({
             <div className="p-3 rounded-lg bg-danger/10 border border-danger/30 text-danger-text text-caption flex items-center gap-2.5 animate-in fade-in">
               <AlertCircle className="w-4 h-4 shrink-0 text-danger-text" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {/* Changelog prompt: players see it once, after key verification, before the script starts */}
+          {clStage !== "idle" && (
+            <div className="rounded-lg border border-line bg-surface p-3">
+              {clStage === "ask" && (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-caption font-semibold text-fg">Add changelog entries for this update?</p>
+                    <p className="text-micro text-fg-muted">Players see them once, the next time they run the script.</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button size="sm" onClick={() => setClStage("idle")}>
+                      Not now
+                    </Button>
+                    <Button size="sm" variant="primary" onClick={() => setClStage("edit")}>
+                      Add changelog
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {(clStage === "edit" || clStage === "saving") && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-caption font-semibold text-fg">What changed</p>
+                    <input
+                      type="text"
+                      value={clTitle}
+                      onChange={(e) => setClTitle(e.target.value)}
+                      maxLength={60}
+                      placeholder="Title (optional), e.g. v1.4"
+                      className="w-48 rounded-lg border border-line-strong bg-surface-raised px-2.5 py-1.5 text-caption text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    {clEntries.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <select
+                          value={entry.type}
+                          onChange={(e) => updateClEntry(i, { type: e.target.value as ChangelogDraft["type"] })}
+                          className="rounded-lg border border-line-strong bg-surface-raised px-2 py-1.5 text-caption text-fg focus:border-accent focus:outline-none"
+                        >
+                          <option value="added">Added</option>
+                          <option value="fixed">Fixed</option>
+                          <option value="changed">Changed</option>
+                          <option value="improved">Improved</option>
+                          <option value="removed">Removed</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={entry.text}
+                          onChange={(e) => updateClEntry(i, { text: e.target.value })}
+                          maxLength={200}
+                          placeholder="Describe the change"
+                          className="min-w-0 flex-1 rounded-lg border border-line-strong bg-surface-raised px-2.5 py-1.5 text-caption text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setClEntries((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev))}
+                          disabled={clEntries.length <= 1}
+                          className="rounded-lg p-1.5 text-fg-subtle transition-colors hover:text-fg disabled:opacity-30"
+                          aria-label="Remove entry"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {clError && <p className="text-micro text-danger-text">{clError}</p>}
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setClEntries((prev) => (prev.length < 30 ? [...prev, { type: "added", text: "" }] : prev))}
+                      className="flex items-center gap-1 text-micro font-semibold text-fg-muted transition-colors hover:text-fg"
+                    >
+                      <Plus className="size-3.5" />
+                      Add entry
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => setClStage("idle")} disabled={clStage === "saving"}>
+                        Skip
+                      </Button>
+                      <Button size="sm" variant="primary" onClick={handleSaveChangelog} loading={clStage === "saving"}>
+                        Save changelog
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {clStage === "done" && (
+                <p className="flex items-center gap-2 text-caption text-fg">
+                  <CheckCircle2 className="size-4 shrink-0 text-success-text" />
+                  Changelog saved. Players will see it the next time they run the script.
+                </p>
+              )}
             </div>
           )}
 

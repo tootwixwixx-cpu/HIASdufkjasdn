@@ -10,6 +10,17 @@ import { getClientIp, normalizeIp, getClientGeo } from "@/lib/ip";
 import { encryptSessionPayload } from "@/lib/crypto-util";
 import { adminAlert } from "@/lib/alerts";
 
+/** Newest owner-written changelog for the script, shaped for the loader. Never throws (missing table => undefined). */
+async function changelogForClient(scriptId: string | undefined) {
+  if (!scriptId) return undefined;
+  try {
+    const cl = await dbService.getLatestChangelog(scriptId);
+    return cl ? { id: cl.id, title: cl.title, entries: cl.entries, created_at: cl.created_at } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isMaliciousScraper(userAgent: string): boolean {
   const lower = userAgent.toLowerCase();
   return (
@@ -698,6 +709,7 @@ export async function POST(req: NextRequest) {
         encrypted_payload: encryptedHex,
         payload_signature: signature,
         nonce,
+        changelog: await changelogForClient(script.id),
       });
     }
 
@@ -849,6 +861,7 @@ export async function POST(req: NextRequest) {
       encrypted_payload: encryptedHex,
       payload_signature: signature,
       nonce,
+      changelog: await changelogForClient(script.id),
     });
   } catch (err: unknown) {
     const message = publicError(err, "Internal verification error");
