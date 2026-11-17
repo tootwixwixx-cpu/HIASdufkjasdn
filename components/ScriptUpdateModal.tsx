@@ -79,9 +79,17 @@ export default function ScriptUpdateModal({
   const bulkFolderInputRef = useRef<HTMLInputElement>(null);
   const [bulkAddMsg, setBulkAddMsg] = useState<string | null>(null);
 
-  // Initialize when script changes or modal opens
+  // Initialize once per "open" session (keyed by script id), NOT on every change to the `script`
+  // prop. handleSave() calls onScriptUpdated() right after a successful save, which gives the parent
+  // a fresh script object and re-renders this modal with a new (but same-id) `script` prop. If this
+  // effect re-ran on that, it would stomp the changelog prompt (clStage) right back to "idle" a frame
+  // after handleSave set it to "ask" -- a visible flash with the prompt never actually showing.
+  const initializedForRef = useRef<string | null>(null);
   useEffect(() => {
     if (script && isOpen) {
+      if (initializedForRef.current === script.id) return;
+      initializedForRef.current = script.id;
+
       const mods = { ...(script.modules || {}) };
       setModulesMap(mods);
       setOriginalMap(mods);
@@ -107,6 +115,8 @@ export default function ScriptUpdateModal({
       setClTitle("");
       setClEntries([{ type: "added", text: "" }]);
       setClError(null);
+    } else {
+      initializedForRef.current = null;
     }
   }, [script, isOpen]);
 
